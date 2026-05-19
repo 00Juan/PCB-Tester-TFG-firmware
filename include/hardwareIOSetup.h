@@ -121,21 +121,6 @@ uint8_t scanI2CDevices() {
     return deviceCount;
 }
 
-/**
- * @brief Initialize I2C bus and scan for available devices
- * 
- * Convenience function that combines I2C initialization and device scanning.
- * 
- * @param clockSpeed I2C clock frequency in Hz (default: 100000 Hz = 100 kHz)
- * @return Number of devices found on the I2C bus
- */
-uint8_t initializeAndScanI2C(uint32_t clockSpeed = 100000) {
-    if (initializeI2C(clockSpeed)) {
-        delay(100);  // Small delay to allow bus to stabilize
-        return scanI2CDevices();
-    }
-    return 0;
-}
 
 
 /**
@@ -150,6 +135,13 @@ uint8_t initializeAndScanI2C(uint32_t clockSpeed = 100000) {
  * @return true if address change was successful, false otherwise
  */
 bool changeMCP4728Address(uint8_t currentAddress, uint8_t newAddressCode) {
+
+    pinMode(pinLedsLdac, OUTPUT);
+    digitalWrite(pinLedsLdac, LOW);
+    delayMicroseconds(100);
+    digitalWrite(pinLedsLdac, HIGH);
+    delay(50);
+
     if (newAddressCode > 7) {
         Serial.println("Error: Address code must be 0-7");
         return false;
@@ -199,28 +191,6 @@ bool changeMCP4728Address(uint8_t currentAddress, uint8_t newAddressCode) {
         Serial.printf("✗ Failed! MCP4728 address is still %d\n", scanedAddress);
         return false;
     }
-}
-
-
-/**
- * @brief Initialize MCP4728 and reprogram its I2C address permanently
- * 
- * Convenience function that sets up the MCP4728 with a new I2C address
- * permanently stored in EEPROM.
- * 
- * @param currentAddress Current I2C address of the MCP4728 (default: 0x60)
- * @param newAddressCode New address code (0-7). Final address will be 0x60 + code
- * @return true if initialization and address change successful, false otherwise
- */
-bool initializeMCP4728(uint8_t currentAddress = 0x60, uint8_t newAddressCode = 0) {
-    // Pulse LDAC to ensure device is ready
-    pinMode(pinLedsLdac, OUTPUT);
-    digitalWrite(pinLedsLdac, LOW);
-    delayMicroseconds(100);
-    digitalWrite(pinLedsLdac, HIGH);
-    delay(50);
-    
-    return changeMCP4728Address(currentAddress, newAddressCode);
 }
 
 
