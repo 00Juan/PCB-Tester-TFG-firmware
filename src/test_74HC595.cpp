@@ -2,11 +2,11 @@
 
 #include "hardwareIOSetup.h"
 
-#include <ShiftRegister74HC595.h>
+
 
 // create a global shift register object
 // parameters: <number of shift registers> (data pin, clock pin, latch pin)
-ShiftRegister74HC595<2> sr(35, 38, 37);
+
  
 void setup() { 
     Serial.begin(115200);
