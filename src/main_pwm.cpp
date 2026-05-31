@@ -56,104 +56,6 @@ uint16_t convertVtoDigitalDAC(float volts) {
     return(uint16_t(aux*4095.0/4.962));
 }
 
-void readAndShowAll16Voltages() {
-uint32_t raw=0;
-float val;
-  
-  Serial.println("\n=== Reading All 16 Channels ===");
-  
-  Serial.println("CHANNELS 1-8 (CS1=7):");
-  for (int i = 0; i < 8; i++) {
-    uint16_t raw = adc1.read(mcp3208_channels[i]);
-    float val = float(adc1.toAnalog(raw))*adc_gain/1000;
-    Serial.printf("  CH%d: %2f V (raw: %4d)\n", i+1, val, raw);
-  }
-
-
-// Serial.println("CHANNELS 9-10 (CS1=7):");
-
-// Serial.println("VCH9:");
-// for (int i = 0; i < 2; i++) {
-//     raw = adc2.read(mcp3208_channels[i]);
-//     val = float(adc2.toAnalog(raw))*adc_gain/1000;
-//     Serial.printf("  CH%d: %2f V (raw: %4d)\n", i+1, val, raw);
-//   }  
-// Serial.println("ICH9:");
-// raw = adc2.read(MCP3208::Channel::SINGLE_2);
-//  Serial.printf(" ICH9 raw: %4d mV\n", raw);
-
-//  raw=0;
-//  for(int i=0;i<100;i++)
-//  {
-//   raw += adc2.read(MCP3208::Channel::SINGLE_2);
-//   delay(1);
-//  }
-
-// val = convertMvToCurrentACS725(raw/100);
-// Serial.printf(" ICH9: %2f\n", val);
-
-
-// Serial.println("VCH10:");
-// raw = adc2.read( MCP3208::Channel::SINGLE_3);
-//  val = float(adc2.toAnalog(raw))*adc_gain/1000;
-// Serial.printf("  CH%d: %2f V (raw: %4d)\n", 10, val, raw);
-
-// Serial.println("ICH10:");
-// raw = adc2.read(MCP3208::Channel::SINGLE_4);
-//  Serial.printf(" ICH10 raw: %4d mV\n", raw);
-
-//   raw=0;
-//  for(int i=0;i<100;i++)
-//  {
-//   raw += adc2.read(MCP3208::Channel::SINGLE_4);
-//   delay(1);
-//  }
-// val = convertMvToCurrentACS725(raw/100);
-// Serial.printf(" ICH10: %2f\n", val);
-
-
-// Serial.println("SUPPLY");
-
-// raw = adc2.read( MCP3208::Channel::SINGLE_7);
-// val = float(adc2.toAnalog(raw))*adc_gain/1000;
-// float voltSupply=val;
-// Serial.printf("Supply: %2f V (raw: %4d)\n", val, raw);
-//   raw=0;
-//  for(int i=0;i<100;i++)
-//  {
-//   raw += adc2.read(MCP3208::Channel::SINGLE_6);
-//   delay(1);
-//  }
-// val = convertMvToCurrentACS725(raw/100);
-// Serial.printf(" Isupply: %2f\n", val);
-// Serial.printf(" POWER: %2f\n", voltSupply*val);
-
-
-
-delay(200);
-
-
-// Serial.println("CHANNEL 11 HV (CS1=7):");
-// uint16_t raw = adc2.read( MCP3208::Channel::SINGLE_5);
-// float val = float(adc2.toAnalog(raw))*305.29/1000;
-// Serial.printf("  CH%d: %2f V (raw: %4d)\n", 11, val, raw);
-// delay(100);
-
-
-  // Serial.println("ADC2 (CS2=6):");
-  // for (int i = 0; i < 8; i++) {
-  //   uint16_t raw = adc2.read(mcp3208_channels[i]);
-  //   float val = float(adc2.toAnalog(raw))*adc_gain/1000;
-  //   Serial.printf("  CH%d: %2f V (raw: %4d)\n", i + 8 +1, val, raw);
-  // }
-  Serial.println("===============================");
-}
-
-
-
-
-
-
 //DAC
 Adafruit_MCP4728 mcp1,mcp2;
 
@@ -195,7 +97,7 @@ void setup() {
       delay(10);
     }
   }
-      mcp1.setChannelValue(MCP4728_CHANNEL_A, convertVtoDigitalDAC(0));
+      mcp1.setChannelValue(MCP4728_CHANNEL_A, convertVtoDigitalDAC(13));
       mcp1.setChannelValue(MCP4728_CHANNEL_B, convertVtoDigitalDAC(0));
       mcp1.setChannelValue(MCP4728_CHANNEL_C, convertVtoDigitalDAC(0));
       mcp1.setChannelValue(MCP4728_CHANNEL_D, convertVtoDigitalDAC(0));
@@ -211,17 +113,22 @@ void setup() {
       pinMode(pinCtrl3,OUTPUT);
       pinMode(pinCtrl4,OUTPUT);
 
-      digitalWrite(pinCtrl1,HIGH);
+      //digitalWrite(pinCtrl1,HIGH);
       digitalWrite(pinCtrl2,HIGH);
       digitalWrite(pinCtrl3,HIGH);
       digitalWrite(pinCtrl4,HIGH);
+
+      analogWriteResolution(8);
+      analogWriteFrequency(1000);
+
 
 
 }
  
 void loop() {
   Serial.println(a);
-readAndShowAll16Voltages();
+//readAndShowAll16Voltages();
+ analogWrite(14, 128);
 }
 
 
