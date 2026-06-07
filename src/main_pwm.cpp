@@ -11,15 +11,15 @@
 #include <Wire.h>
 
 //SSR
-ShiftRegister74HC595<2> sr(35, 38, 37);
+// ShiftRegister74HC595<2> sr(35, 38, 37);
 
 //ADC
-#define SPI_CS1    	7 		   // SPI slave select
-#define SPI_CS2    	6 		   // SPI slave select
-#define ADC_VREF    3395     // 3.3V Vref
+// #define SPI_CS1    	7 		   // SPI slave select
+// #define SPI_CS2    	6 		   // SPI slave select
+// #define ADC_VREF    3395     // 3.3V Vref
 #define ADC_CLK     1600000  // SPI clock 1.6MHz
-MCP3208 adc1(ADC_VREF, SPI_CS1);
-MCP3208 adc2(ADC_VREF, SPI_CS2);
+// MCP3208 adc1(ADC_VREF, SPI_CS1);
+// MCP3208 adc2(ADC_VREF, SPI_CS2);
 const float adc_gain= 6.11915;
 const float opamp_gain= 4.92;
 float a;
@@ -57,7 +57,7 @@ uint16_t convertVtoDigitalDAC(float volts) {
 }
 
 //DAC
-Adafruit_MCP4728 mcp1,mcp2;
+// Adafruit_MCP4728 DAC1,DAC2;
 
  
 void setup() {
@@ -82,29 +82,17 @@ void setup() {
   SPI.beginTransaction(settings);
 
   //DAC
-    // Try to initialize!
-  if (!mcp1.begin(0x61)) {
-    Serial.println("Failed to find MCP4728 1 chip");
-    while (1) {
-      delay(10);
-    }
-  }
+  initializeMCP4728();
 
-   // Try to initialize!
-  if (!mcp2.begin(0x60)) {
-    Serial.println("Failed to find MCP4728 2 chip");
-    while (1) {
-      delay(10);
-    }
-  }
-      mcp1.setChannelValue(MCP4728_CHANNEL_A, convertVtoDigitalDAC(13));
-      mcp1.setChannelValue(MCP4728_CHANNEL_B, convertVtoDigitalDAC(0));
-      mcp1.setChannelValue(MCP4728_CHANNEL_C, convertVtoDigitalDAC(0));
-      mcp1.setChannelValue(MCP4728_CHANNEL_D, convertVtoDigitalDAC(0));
-      mcp2.setChannelValue(MCP4728_CHANNEL_A, convertVtoDigitalDAC(0));
-      mcp2.setChannelValue(MCP4728_CHANNEL_B, convertVtoDigitalDAC(0));
-      mcp2.setChannelValue(MCP4728_CHANNEL_C, convertVtoDigitalDAC(0));
-      mcp2.setChannelValue(MCP4728_CHANNEL_D, convertVtoDigitalDAC(0));
+  
+      DAC1.setChannelValue(MCP4728_CHANNEL_A, convertVtoDigitalDAC(13));
+      DAC1.setChannelValue(MCP4728_CHANNEL_B, convertVtoDigitalDAC(0));
+      DAC1.setChannelValue(MCP4728_CHANNEL_C, convertVtoDigitalDAC(0));
+      DAC1.setChannelValue(MCP4728_CHANNEL_D, convertVtoDigitalDAC(0));
+      DAC2.setChannelValue(MCP4728_CHANNEL_A, convertVtoDigitalDAC(0));
+      DAC2.setChannelValue(MCP4728_CHANNEL_B, convertVtoDigitalDAC(0));
+      DAC2.setChannelValue(MCP4728_CHANNEL_C, convertVtoDigitalDAC(0));
+      DAC2.setChannelValue(MCP4728_CHANNEL_D, convertVtoDigitalDAC(0));
 
 
       //CHANNEL CONTROL

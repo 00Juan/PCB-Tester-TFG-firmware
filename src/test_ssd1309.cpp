@@ -9,7 +9,7 @@ void setup(void) {
   delay(1000);
   
   Serial.println("Starting SSD1309 Display Test...");
-initializeSSD1309();
+  initializeSSD1309();
 }
 
 void loop(void) {
