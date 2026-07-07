@@ -1,14 +1,238 @@
 #include <Arduino.h>
 #include "hardwareIOSetup.h"
 
-// Define a test channel, e.g., Channel 1, which supports PWM
-LVLPChannel *testChannel = &lvlpChannels[0];
-LVLPChannel *testChannel2 = &lvlpChannels[1];
+constexpr uint8_t kNumTestChannels = 8;
+constexpr float kReferenceVespVoltage = 3.269f;
+LVLPChannel *testChannels[kNumTestChannels] = {
+    &lvlpChannels[0],
+    &lvlpChannels[1],
+    &lvlpChannels[2],
+    &lvlpChannels[3],
+    &lvlpChannels[4],
+    &lvlpChannels[5],
+    &lvlpChannels[6],
+    &lvlpChannels[7],
+};
 
+struct ChannelReading
+{
+    float voltage;
+    float current;
+};
 
+ChannelReading channelReadings[kNumTestChannels];
 
-unsigned long lastUpdate = 0;
-int state = 0;
+void setAllChannelsHighImpedance()
+{
+    for (uint8_t i = 0; i < kNumTestChannels; i++)
+    {
+        testChannels[i]->setMode(MODE_HIGH_IMPEDANCE);
+        testChannels[i]->setOutputVoltage(0.0f);
+    }
+}
+
+void setOnlyChannelAsVoltageSource(uint8_t channelIndex, float voltage)
+{
+    setAllChannelsHighImpedance();
+    testChannels[channelIndex]->setMode(MODE_VOLTAGE_SOURCE);
+    testChannels[channelIndex]->setOutputVoltage(voltage);
+}
+
+struct LinearFit
+{
+    float slope;
+    float intercept;
+    bool valid;
+};
+
+LinearFit fitLinearModel(const float *xValues, const float *yValues, uint8_t count)
+{
+    LinearFit fit = {0.0f, 0.0f, false};
+    if (count < 2)
+    {
+        return fit;
+    }
+
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    float sumXX = 0.0f;
+    float sumXY = 0.0f;
+
+    for (uint8_t i = 0; i < count; i++)
+    {
+        sumX += xValues[i];
+        sumY += yValues[i];
+        sumXX += xValues[i] * xValues[i];
+        sumXY += xValues[i] * yValues[i];
+    }
+
+    float denominator = (count * sumXX) - (sumX * sumX);
+    if (fabsf(denominator) < 1e-6f)
+    {
+        return fit;
+    }
+
+    fit.slope = ((count * sumXY) - (sumX * sumY)) / denominator;
+    fit.intercept = (sumY - (fit.slope * sumX)) / count;
+    fit.valid = true;
+    return fit;
+}
+
+void applyCalibrationToChannel(uint8_t channelIndex, const ChannelCalibrationData &calibration)
+{
+    chCalData[channelIndex] = calibration;
+    testChannels[channelIndex]->setCalibrationData(calibration);
+}
+
+void printCalibrationData(uint8_t channelIndex, const ChannelCalibrationData &calibration)
+{
+    Serial.printf("CH%u calibration:\n", channelIndex + 1);
+    Serial.printf("  K1=%.6f K2=%.6f offset=%.6f\n", calibration.K1, calibration.K2, calibration.offset);
+    Serial.printf("  mADC=%.6f bADC=%.6f mDAC=%.6f bDAC=%.6f\n", calibration.mADC, calibration.bADC, calibration.mDAC, calibration.bDAC);
+}
+
+void printCalibrationBlockForPaste()
+{
+    Serial.println("\n=== chCalData block for paste ===");
+    Serial.println("ChannelCalibrationData chCalData[8] = {");
+    for (uint8_t i = 0; i < kNumTestChannels; i++)
+    {
+        const ChannelCalibrationData &calibration = chCalData[i];
+        Serial.printf("    { %.9ff, %.9ff, %.9ff, %.9ff, %.9ff, %.9ff, %.9ff }, // CH%u\n",
+                      calibration.K1,
+                      calibration.K2,
+                      calibration.offset,
+                      calibration.mADC,
+                      calibration.bADC,
+                      calibration.mDAC,
+                      calibration.bDAC,
+                      i + 1);
+    }
+    Serial.println("};");
+    Serial.println("=== End chCalData block ===\n");
+}
+
+bool calibrateChannelWithReference(uint8_t channelIndex, const float *targets, uint8_t targetCount)
+{
+    if (channelIndex == 0)
+    {
+        Serial.println("CH1 is the reference channel; keeping its calibration as-is.");
+        return true;
+    }
+
+    float rawSamples[8];
+    float referenceSamples[8];
+    float dacVoltageSamples[8];
+
+    for (uint8_t sample = 0; sample < targetCount; sample++)
+    {
+        setOnlyChannelAsVoltageSource(channelIndex, targets[sample]);
+
+        delay(250);
+
+        referenceSamples[sample] = testChannels[0]->readVoltage();
+        rawSamples[sample] = static_cast<float>(testChannels[channelIndex]->readMCP3208Value());
+        dacVoltageSamples[sample] = testChannels[channelIndex]->dacVoltageAttribute;
+
+        Serial.printf("CH%u sample %u: target=%.3f V, ref=%.3f V, raw=%.0f, dacV=%.4f V\n",
+                      channelIndex + 1,
+                      sample + 1,
+                      targets[sample],
+                      referenceSamples[sample],
+                      rawSamples[sample],
+                      dacVoltageSamples[sample]);
+    }
+
+    LinearFit adcFit = fitLinearModel(rawSamples, referenceSamples, targetCount);
+    LinearFit outputFit = fitLinearModel(dacVoltageSamples, referenceSamples, targetCount);
+
+    if (!adcFit.valid || !outputFit.valid)
+    {
+        Serial.printf("CH%u calibration failed: insufficient linear fit quality.\n", channelIndex + 1);
+        return false;
+    }
+
+    ChannelCalibrationData calibration = chCalData[channelIndex];
+    const ChannelCalibrationData referenceCalibration = chCalData[0];
+
+    calibration.K1 = referenceCalibration.K1;
+    calibration.K2 = outputFit.slope;
+    calibration.offset = outputFit.intercept - (calibration.K1 * kReferenceVespVoltage);
+    calibration.mADC = adcFit.slope;
+    calibration.bADC = adcFit.intercept;
+    calibration.mDAC = referenceCalibration.mDAC;
+    calibration.bDAC = referenceCalibration.bDAC;
+
+    applyCalibrationToChannel(channelIndex, calibration);
+    printCalibrationData(channelIndex, calibration);
+    return true;
+}
+
+void runCalibrationRoutine()
+{
+    Serial.println("\n=== Shared-Reference Calibration Routine ===");
+    Serial.println("Tie all LP channel outputs together and keep only one channel active at a time.");
+    Serial.println("CH1 will be used as the measurement reference.");
+
+    const float calibrationTargets[] = {1.0f, 3.0f, 5.0f, 8.0f, 11.0f};
+    const uint8_t calibrationTargetCount = sizeof(calibrationTargets) / sizeof(calibrationTargets[0]);
+
+    for (uint8_t i = 0; i < kNumTestChannels; i++)
+    {
+        testChannels[i]->resetStatus();
+    }
+
+    setAllChannelsHighImpedance();
+
+    for (uint8_t channelIndex = 1; channelIndex < kNumTestChannels; channelIndex++)
+    {
+        Serial.printf("\n--- Calibrating CH%u against CH1 ---\n", channelIndex + 1);
+        calibrateChannelWithReference(channelIndex, calibrationTargets, calibrationTargetCount);
+    }
+
+    printCalibrationBlockForPaste();
+    Serial.println("\n=== Calibration routine complete ===");
+}
+
+void readAllChannels()
+{
+    for (uint8_t i = 0; i < kNumTestChannels; i++)
+    {
+        channelReadings[i].voltage = testChannels[i]->readVoltage();
+        channelReadings[i].current = testChannels[i]->readCurrent();
+    }
+}
+
+void printAllChannelsToSerial()
+{
+    for (uint8_t i = 0; i < kNumTestChannels; i++)
+    {
+        Serial.printf("CH%u: %.3f V | %.5f A\n", i + 1, channelReadings[i].voltage, channelReadings[i].current);
+    }
+}
+
+void drawChannelPage(uint8_t firstChannel)
+{
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_5x8_mr);
+
+    for (uint8_t row = 0; row < 8; row++)
+    {
+        uint8_t channelIndex = firstChannel + row;
+        if (channelIndex >= kNumTestChannels)
+        {
+            break;
+        }
+
+        char line[24];
+        snprintf(line, sizeof(line), "%u:%5.2fV %5.3fA", channelIndex + 1, channelReadings[channelIndex].voltage, channelReadings[channelIndex].current);
+        u8g2.drawStr(0, (row + 1) * 8, line);
+    }
+
+ 
+
+    u8g2.sendBuffer();
+}
 
 void displayData(String data)
 {
@@ -28,7 +252,6 @@ void setup()
     }
     Serial.println("\n--- LVLPChannel Test Initialize ---");
 
-    // Initialize hardware peripherals
     if (!initializeMCP4728())
     {
         Serial.println("MCP4728 Initialization Failed!");
@@ -41,154 +264,73 @@ void setup()
 
     Serial.println("Starting SSD1309 Display Test...");
     initializeSSD1309();
-    u8g2.clearBuffer();                 // clear the internal memory
-    u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_ncenB08_tr);
 
-    // SSR initialization
     pinMode(pinSrOe, OUTPUT);
-    digitalWrite(pinSrOe, LOW); // enable output
+    digitalWrite(pinSrOe, LOW);
     sr.setAllHigh();
 
     initializeWS2812B();
-    initializeEncoder(-100,100,true);    
+    initializeEncoder(-100, 100, true);
 
-    // Initialize all channels
-    for (int i = 0; i < 8; i++)
+    bool runCalibrationOnBoot = !digitalRead(pinEncoderSw);
+
+    for (uint8_t i = 0; i < kNumTestChannels; i++)
     {
         lvlpChannels[i].init();
     }
 
-    Serial.println("Initialization complete. Starting test cycle on CH1.");
-    testChannel->setLimits(11,0.004);
-    testChannel2->setLimits(14,0.03);
-    testChannel->setMode(MODE_VOLTAGE_SOURCE);
-    testChannel2->setMode(MODE_HIGH_IMPEDANCE);
-    testChannel->setOutputVoltage(10); // 5V (4.974)  1V(0.962)   10V(9.98)
-     testChannel2->setOutputVoltage(12); // 5V (4.974)  1V(0.962)   10V(9.98)
-     delay(1000);
+    if (runCalibrationOnBoot)
+    {
+        runCalibrationRoutine();
+    }
+    else
+    {
+        Serial.println("Initialization complete. Starting test cycle on all channels.");
+        for (uint8_t i = 0; i < kNumTestChannels; i++)
+        {
+            testChannels[i]->setLimits(12, 0.005);
+            testChannels[i]->setMode(MODE_VOLTAGE_SOURCE);
+            testChannels[i]->setOutputVoltage(5);
+        }
+    }
 
-
+    delay(1000);
 }
 
 void loop()
 {
-    bool botEncoder=digitalRead(pinEncoderSw);
-    if(!botEncoder)
+    bool botEncoder = digitalRead(pinEncoderSw);
+    if (!botEncoder)
     {
-        testChannel->resetStatus();
-        testChannel2->resetStatus();
+        for (uint8_t i = 0; i < kNumTestChannels; i++)
+        {
+            if(testChannels[i]->getStatus()!=STATUS_NORMAL)
+            {
+                testChannels[i]->resetStatus();
+            }
+        }
     }
-    // Continuously call update for the regulation loop
-    testChannel->update();
-    //testChannel->setMode(MODE_HIGH_IMPEDANCE);
-   // testChannel->setOutputVoltage(5); // 5V (4.974)  1V(0.962)   10V(9.98)
 
-   testChannel2->update();
-   // testChannel2->setMode(MODE_VOLTAGE_SOURCE);
-    //testChannel2->setOutputVoltage(12); // 5V (4.974)  1V(0.962)   10V(9.98)
+    for (uint8_t i = 0; i < kNumTestChannels; i++)
+    {
+        testChannels[i]->update();
+    }
 
-
-    //    testChannel->setMode(MODE_CURRENT_SOURCE);
-    // testChannel->setOutputCurrent(-0.020);
-
-    // Print measurements every 1 second
     static unsigned long lastPrint = 0;
     if (millis() - lastPrint > 1000)
     {
         lastPrint = millis();
 
-        float vOut = testChannel->readVoltage();
-        float current = testChannel->readCurrent();
-        float vOut2 = testChannel2->readVoltage();
-        float current2 = testChannel2->readCurrent();
+        readAllChannels();
 
-        // Serial.printf("Mode: %d | Voltage: %.3f V || Voltage Expected: %.3f V | Current: %.3f A\n",
-        //               testChannel->getMode(), vOut, testChannel->calculateExpectedOutputVoltage(testChannel->dacValueAttribute), current);
+        for (uint8_t i = 0; i < kNumTestChannels; i++)
+        {
+            //testChannels[i]->printDebugInfo();
+        }
 
-        //               Serial.printf("Mode: %d | Voltage: %.3f V || Voltage Expected: %.3f V | Current: %.3f A\n\n",
-        //               testChannel2->getMode(), vOut2, testChannel2->calculateExpectedOutputVoltage(testChannel2->dacValueAttribute), current2);
-
-        float dacVoltage = testChannel->dacVoltageAttribute;
-        float dacValue = testChannel->dacValueAttribute;
-        //Serial.println(dacVoltage);
-        String dacVoltageStr = String(dacVoltage, 5);
-        String dacValueStr = String(dacValue, 5);
-
-        u8g2.clearBuffer();
-        // u8g2.drawStr(0, 20, dacVoltageStr.c_str());
-        // u8g2.drawStr(0, 40, dacValueStr.c_str());
-        u8g2.setCursor(0, 20);
-        u8g2.print(vOut);
-        u8g2.setCursor(0, 40);
-        u8g2.print(current, 5);
-        u8g2.print(" A");
-
-        u8g2.sendBuffer();
+        //printAllChannelsToSerial();
+        drawChannelPage(0);
     }
 }
-
-// Serial.println(sum/1000);
-
-// if (millis() - lastUpdate > 10000) {
-//     lastUpdate = millis();
-//     state = (state + 1) % 4;
-
-//     Serial.println("\n==================================");
-//     switch (state) {
-//         case 0:
-//             Serial.println("State: VOLTAGE SOURCE (Target: 3.3V)");
-//             testChannel->setMode(MODE_VOLTAGE_SOURCE);
-//             testChannel->setOutputVoltage(3.3);
-//             break;
-//         case 1:
-//             Serial.println("State: CURRENT SOURCE (Target: 0.1A)");
-//             testChannel->setMode(MODE_CURRENT_SOURCE);
-//             testChannel->setOutputCurrent(0.1);
-//             break;
-//         case 2:
-//             Serial.println("State: PWM GENERATOR (50% Duty @ 1kHz)");
-//             if (testChannel->setMode(MODE_PWM_GENERATOR)) {
-//                 testChannel->setPwm(128, 1000);
-//             } else {
-//                 Serial.println("PWM mode not supported on this channel!");
-//             }
-//             break;
-//         case 3:
-//             Serial.println("State: HIGH IMPEDANCE (Disconnected)");
-//             testChannel->setMode(MODE_HIGH_IMPEDANCE);
-//             break;
-//     }
-//     Serial.println("==================================");
-// }
-
-// if (millis() - lastUpdate > 10000) {
-//     lastUpdate = millis();
-//     state = (state + 1) % 4;
-
-//     Serial.println("\n==================================");
-//     switch (state) {
-//         case 0:
-//             Serial.println("State: VOLTAGE SOURCE (Target: 3.3V)");
-//             testChannel->setMode(MODE_VOLTAGE_SOURCE);
-//             testChannel->setOutputVoltage(3.3);
-//             break;
-//         case 1:
-//            Serial.println("State: VOLTAGE SOURCE (Target: 3.3V)");
-//             testChannel->setMode(MODE_VOLTAGE_SOURCE);
-//             testChannel->setOutputVoltage(10);
-//             break;
-//         case 2:
-//             Serial.println("State: PWM GENERATOR (50% Duty @ 1kHz)");
-//             if (testChannel->setMode(MODE_PWM_GENERATOR)) {
-//                 testChannel->setPwm(128, 1000);
-//             } else {
-//                 Serial.println("PWM mode not supported on this channel!");
-//             }
-//             break;
-//         case 3:
-//             Serial.println("State: HIGH IMPEDANCE (Disconnected)");
-//             testChannel->setMode(MODE_HIGH_IMPEDANCE);
-//             break;
-//     }
-//     Serial.println("==================================");
-// }

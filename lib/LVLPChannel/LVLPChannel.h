@@ -49,19 +49,22 @@ private:
     
     int8_t pwmPin; // -1 if not assigned
     
-    LVLPMode currentMode;
+    LVLPMode channelMode;
     CRGB* led;
 
-    LVLPStatus currentStatus;
+    LVLPStatus channelStatus;
     float maxVoltageLimit;
     float maxCurrentLimit;
     void checkLimits();
     
-    float targetVoltage;
+    float userTargetVoltage;
     float targetCurrent;
-    float currentDacVoltage; // Current voltage setting sent to DAC 
-                             // (this corresponds to the desired op-amp output voltage before the shunt)
-    
+    float loopTargetVoltage; 
+
+    float channelVoltageOut;
+    float channelCurrentOut;
+
+
     float opampGain;
     float adcGain;
     float adcOffset;
@@ -84,7 +87,7 @@ public:
                 int8_t pwmP, const ChannelCalibrationData& calDataRef,CRGB* ledPtr);
 
     void setLimits(float maxVoltage, float maxCurrent);
-    LVLPStatus getStatus() const { return currentStatus; }
+    LVLPStatus getStatus() const { return channelStatus; }
     void resetStatus();
     void init();
     bool setMode(LVLPMode mode);
@@ -92,6 +95,7 @@ public:
     void setDACOutput(uint16_t value);
     void setOutputCurrent(float current);
     bool setPwm(uint8_t dutycycle, uint32_t frequency);
+    void setCalibrationData(const ChannelCalibrationData& newCalData);
     
     float readVoltage();
     uint16_t readMCP3208Value();
@@ -104,10 +108,12 @@ public:
 
     float calculateExpectedOutputVoltage(uint16_t dacValue);
 
+    void printDebugInfo() const;
+
     uint16_t dacValueAttribute=0;
     float dacVoltageAttribute=0;
     
-    LVLPMode getMode() const { return currentMode; }
+    LVLPMode getMode() const { return channelMode; }
 };
 
 #endif
