@@ -92,13 +92,11 @@ U8G2_SSD1309_128X64_NONAME0_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 #define NUM_LEDS      11
 // We are using the pin dedicated for LED and DAC control
 #define LED_PIN       pinLedsLdac
-#define BRIGHTNESS    255
+#define BRIGHTNESS    20
 #define LED_TYPE      WS2812B
 #define COLOR_ORDER   GRB
 
 CRGB leds[NUM_LEDS];
-
-
 
 
 #include "LVLPChannel.h"
@@ -106,8 +104,8 @@ CRGB leds[NUM_LEDS];
 
 ChannelCalibrationData chCalData[8] = {
     // K1,   K2,  offset,   mAdc,    bAdc, mDAC, bDAC
-    { 4.922408941f, -3.92006689f, 0.001811177f,   0.005067654f, 0.022896532f, 821.5434084, -5.503215434 }, // CH1 //estaba a -1.503215434
-    { 1.0f, 1.0f, 0.0f,   1.0f, 0.0f }, // CH2
+    { 4.922408941f, -3.92006689f, 0.001811177f,   0.005067654f, 0.022896532f, 821.5434084, 43.503215434 }, // CH1 //estaba a -1.503215434
+    { 4.922408941f, -3.92006689f, 0.001811177f,   0.005067654f, 0.022896532f, 821.5434084, -1.503215434 }, // CH2
     { 1.0f, 1.0f, 0.0f,   1.0f, 0.0f }, // CH3
     { 1.0f, 1.0f, 0.0f,   1.0f, 0.0f }, // CH4
     { 1.0f, 1.0f, 0.0f,   1.0f, 0.0f }, // CH5
@@ -120,21 +118,21 @@ ChannelCalibrationData chCalData[8] = {
 // LVLP Channels configuration
 LVLPChannel lvlpChannels[8] = {
     // CH1: DAC1_A, ADC1_0, SR_0, PWM Ctrl1 (pin 14)
-    LVLPChannel(1, &adc1, MCP3208::Channel::SINGLE_0, &DAC1, MCP4728_CHANNEL_A, &sr, 0, pinCtrl1, chCalData[0]),
+    LVLPChannel(1, &adc1, MCP3208::Channel::SINGLE_0, &DAC1, MCP4728_CHANNEL_A, &sr, 0, pinCtrl1, chCalData[0],&leds[0]),
     // CH2: DAC1_B, ADC1_1, SR_1, PWM Ctrl2 (pin 15)
-    LVLPChannel(2, &adc1, MCP3208::Channel::SINGLE_1, &DAC1, MCP4728_CHANNEL_B, &sr, 1, pinCtrl2, chCalData[1]),
+    LVLPChannel(2, &adc1, MCP3208::Channel::SINGLE_1, &DAC1, MCP4728_CHANNEL_B, &sr, 1, pinCtrl2, chCalData[1],&leds[1]),
     // CH3: DAC1_C, ADC1_2, SR_2, PWM Ctrl3 (pin 16)
-    LVLPChannel(3, &adc1, MCP3208::Channel::SINGLE_2, &DAC1, MCP4728_CHANNEL_C, &sr, 2, pinCtrl3, chCalData[2]),
+    LVLPChannel(3, &adc1, MCP3208::Channel::SINGLE_2, &DAC1, MCP4728_CHANNEL_C, &sr, 2, pinCtrl3, chCalData[2],&leds[2]),
     // CH4: DAC1_D, ADC1_3, SR_3, PWM Ctrl4 (pin 10)
-    LVLPChannel(4, &adc1, MCP3208::Channel::SINGLE_3, &DAC1, MCP4728_CHANNEL_D, &sr, 3, pinCtrl4, chCalData[3]),
+    LVLPChannel(4, &adc1, MCP3208::Channel::SINGLE_3, &DAC1, MCP4728_CHANNEL_D, &sr, 3, pinCtrl4, chCalData[3],&leds[3]),
     // CH5: DAC2_A, ADC1_4, SR_4, No PWM
-    LVLPChannel(5, &adc1, MCP3208::Channel::SINGLE_4, &DAC2, MCP4728_CHANNEL_A, &sr, 4, -1, chCalData[4]),
+    LVLPChannel(5, &adc1, MCP3208::Channel::SINGLE_4, &DAC2, MCP4728_CHANNEL_A, &sr, 4, -1, chCalData[4],&leds[4]),
     // CH6: DAC2_B, ADC1_5, SR_5, No PWM 
-    LVLPChannel(6, &adc1, MCP3208::Channel::SINGLE_5, &DAC2, MCP4728_CHANNEL_B, &sr, 5, -1, chCalData[5]),
+    LVLPChannel(6, &adc1, MCP3208::Channel::SINGLE_5, &DAC2, MCP4728_CHANNEL_B, &sr, 5, -1, chCalData[5],&leds[5]),
     // CH7: DAC2_C, ADC1_6, SR_6, No PWM
-    LVLPChannel(7, &adc1, MCP3208::Channel::SINGLE_6, &DAC2, MCP4728_CHANNEL_C, &sr, 6, -1, chCalData[6]),
+    LVLPChannel(7, &adc1, MCP3208::Channel::SINGLE_6, &DAC2, MCP4728_CHANNEL_C, &sr, 6, -1, chCalData[6],&leds[6]),
     // CH8: DAC2_D, ADC1_7, SR_7, No PWM
-    LVLPChannel(8, &adc1, MCP3208::Channel::SINGLE_7, &DAC2, MCP4728_CHANNEL_D, &sr, 7, -1, chCalData[7])
+    LVLPChannel(8, &adc1, MCP3208::Channel::SINGLE_7, &DAC2, MCP4728_CHANNEL_D, &sr, 7, -1, chCalData[7],&leds[7])
 };
 
 

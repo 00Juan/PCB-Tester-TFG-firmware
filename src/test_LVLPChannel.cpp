@@ -3,6 +3,9 @@
 
 // Define a test channel, e.g., Channel 1, which supports PWM
 LVLPChannel *testChannel = &lvlpChannels[0];
+LVLPChannel *testChannel2 = &lvlpChannels[1];
+
+
 
 unsigned long lastUpdate = 0;
 int state = 0;
@@ -46,6 +49,9 @@ void setup()
     digitalWrite(pinSrOe, LOW); // enable output
     sr.setAllHigh();
 
+    initializeWS2812B();
+    initializeEncoder(-100,100,true);    
+
     // Initialize all channels
     for (int i = 0; i < 8; i++)
     {
@@ -53,28 +59,37 @@ void setup()
     }
 
     Serial.println("Initialization complete. Starting test cycle on CH1.");
+    testChannel->setLimits(11,0.004);
+    testChannel2->setLimits(14,0.03);
+    testChannel->setMode(MODE_VOLTAGE_SOURCE);
+    testChannel2->setMode(MODE_HIGH_IMPEDANCE);
+    testChannel->setOutputVoltage(10); // 5V (4.974)  1V(0.962)   10V(9.98)
+     testChannel2->setOutputVoltage(12); // 5V (4.974)  1V(0.962)   10V(9.98)
+     delay(1000);
+
+
 }
 
 void loop()
 {
+    bool botEncoder=digitalRead(pinEncoderSw);
+    if(!botEncoder)
+    {
+        testChannel->resetStatus();
+        testChannel2->resetStatus();
+    }
     // Continuously call update for the regulation loop
     testChannel->update();
-    testChannel->setMode(MODE_VOLTAGE_SOURCE);
-    testChannel->setOutputVoltage(5); //5V (4.974)  1V(0.962)   10V(9.98)
-   //testChannel->setDACOutput(700);
+    //testChannel->setMode(MODE_HIGH_IMPEDANCE);
+   // testChannel->setOutputVoltage(5); // 5V (4.974)  1V(0.962)   10V(9.98)
 
-    float dacVoltage = testChannel->dacVoltageAttribute;
-    float dacValue = testChannel->dacValueAttribute;
-    Serial.println(dacVoltage);
-    String dacVoltageStr = String(dacVoltage, 5);
-    String dacValueStr = String(dacValue, 5);
+   testChannel2->update();
+   // testChannel2->setMode(MODE_VOLTAGE_SOURCE);
+    //testChannel2->setOutputVoltage(12); // 5V (4.974)  1V(0.962)   10V(9.98)
 
-    uint32_t sum = 0;
-    for (int i = 0; i < 1000; i++)
-    {
-        sum += testChannel->readMCP3208Value();
-        delay(1);
-    }
+
+    //    testChannel->setMode(MODE_CURRENT_SOURCE);
+    // testChannel->setOutputCurrent(-0.020);
 
     // Print measurements every 1 second
     static unsigned long lastPrint = 0;
@@ -84,19 +99,30 @@ void loop()
 
         float vOut = testChannel->readVoltage();
         float current = testChannel->readCurrent();
+        float vOut2 = testChannel2->readVoltage();
+        float current2 = testChannel2->readCurrent();
 
-        Serial.printf("Mode: %d | Voltage: %.3f V || Voltage Expected: %.3f V | Current: %.3f A\n",
-                      testChannel->getMode(), vOut, testChannel->calculateExpectedOutputVoltage(testChannel->dacValueAttribute), current);
+        // Serial.printf("Mode: %d | Voltage: %.3f V || Voltage Expected: %.3f V | Current: %.3f A\n",
+        //               testChannel->getMode(), vOut, testChannel->calculateExpectedOutputVoltage(testChannel->dacValueAttribute), current);
+
+        //               Serial.printf("Mode: %d | Voltage: %.3f V || Voltage Expected: %.3f V | Current: %.3f A\n\n",
+        //               testChannel2->getMode(), vOut2, testChannel2->calculateExpectedOutputVoltage(testChannel2->dacValueAttribute), current2);
+
+        float dacVoltage = testChannel->dacVoltageAttribute;
+        float dacValue = testChannel->dacValueAttribute;
+        //Serial.println(dacVoltage);
+        String dacVoltageStr = String(dacVoltage, 5);
+        String dacValueStr = String(dacValue, 5);
 
         u8g2.clearBuffer();
         // u8g2.drawStr(0, 20, dacVoltageStr.c_str());
         // u8g2.drawStr(0, 40, dacValueStr.c_str());
-        u8g2.setCursor(0,20);
+        u8g2.setCursor(0, 20);
         u8g2.print(vOut);
-        u8g2.setCursor(0,40);
-        u8g2.print(current,5);
+        u8g2.setCursor(0, 40);
+        u8g2.print(current, 5);
         u8g2.print(" A");
-        
+
         u8g2.sendBuffer();
     }
 }

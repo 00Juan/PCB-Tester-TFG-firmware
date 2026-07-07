@@ -17,8 +17,9 @@ void setup() {
 }
 
 void loop() {
-  Serial.println("Turning LEDs Red...");
-  fill_solid(leds, NUM_LEDS, CRGB::Yellow4);
+  Serial.println("Turning only LED #5 on...");
+  FastLED.clear(); // Sets all LEDs to black (off)
+  leds[4] = CRGB::Yellow4; // Index 4 is the 5th LED
   FastLED.show();
   delay(1000);
 
@@ -42,7 +43,3 @@ void loop() {
 //   }
 //   delay(500);
 }
-
-
-
-

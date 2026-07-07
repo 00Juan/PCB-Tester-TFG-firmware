@@ -5,6 +5,7 @@
 #include <Mcp320x.h>
 #include <Adafruit_MCP4728.h>
 #include <ShiftRegister74HC595.h>
+#include <FastLED.h>
 
 
 enum LVLPMode {
@@ -13,6 +14,13 @@ enum LVLPMode {
     MODE_CURRENT_SOURCE,
     MODE_RESISTIVE_LOAD,
     MODE_PWM_GENERATOR
+};
+
+enum LVLPStatus {
+    STATUS_NORMAL,
+    STATUS_FAIL_OVERCURRENT,
+    STATUS_FAIL_OVERVOLTAGE,
+    STATUS_FAIL_OTHER
 };
 
 struct ChannelCalibrationData {
@@ -42,6 +50,12 @@ private:
     int8_t pwmPin; // -1 if not assigned
     
     LVLPMode currentMode;
+    CRGB* led;
+
+    LVLPStatus currentStatus;
+    float maxVoltageLimit;
+    float maxCurrentLimit;
+    void checkLimits();
     
     float targetVoltage;
     float targetCurrent;
@@ -67,8 +81,11 @@ public:
                 MCP3208* adcPtr, MCP3208::Channel adcCh,
                 Adafruit_MCP4728* dacPtr, MCP4728_channel_t dacCh,
                 ShiftRegister74HC595<2>* srPtr, uint8_t srP,
-                int8_t pwmP, const ChannelCalibrationData& calDataRef);
+                int8_t pwmP, const ChannelCalibrationData& calDataRef,CRGB* ledPtr);
 
+    void setLimits(float maxVoltage, float maxCurrent);
+    LVLPStatus getStatus() const { return currentStatus; }
+    void resetStatus();
     void init();
     bool setMode(LVLPMode mode);
     void setOutputVoltage(float voltage);
