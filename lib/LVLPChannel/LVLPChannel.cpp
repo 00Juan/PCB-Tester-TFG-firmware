@@ -24,6 +24,13 @@ LVLPChannel::LVLPChannel(uint8_t chIndex, MCP3208 *adcPtr,
   calData.offset = calDataRef.offset;
   calData.mADC = calDataRef.mADC;
   calData.bADC = calDataRef.bADC;
+
+  pidKp = 5.0f;
+  pidKi = 50.0f;
+  pidKd = 0.0f;
+  pidIntegral = 0.0f;
+  pidPrevError = 0.0f;
+  pidLastTime = millis();
 }
 
 void LVLPChannel::setLimits(float maxVoltage, float maxCurrent) {
@@ -44,11 +51,12 @@ void LVLPChannel::checkLimits() {
 
   if (channelStatus != STATUS_NORMAL)
     return;
-  // Only check limits actively if not in high impedance mode to avoid noise
-  // triggering
 
   if (channelVoltageOut > maxVoltageLimit) {
-    disconnect();
+    // setMode is safe here: channelStatus is still STATUS_NORMAL at this point,
+    // so the guard in setMode() allows MODE_HIGH_IMPEDANCE.
+    // This opens the relay AND drives the PWM pin LOW (for CH1-CH4).
+    setMode(MODE_HIGH_IMPEDANCE);
     channelStatus = STATUS_FAIL_OVERVOLTAGE;
     if (led) {
       *led = CRGB::Blue;
@@ -56,15 +64,17 @@ void LVLPChannel::checkLimits() {
     }
 
   } else if (abs(channelCurrentOut) > maxCurrentLimit) {
-     if (channelMode == MODE_HIGH_IMPEDANCE) return;
-    disconnect();
+    // Do not trip in high-impedance mode (ADC noise can cause false readings).
+    if (channelMode == MODE_HIGH_IMPEDANCE) return;
+    setMode(MODE_HIGH_IMPEDANCE);
     channelStatus = STATUS_FAIL_OVERCURRENT;
     if (led) {
-        *led = CRGB::Red;
-        FastLED.show();
+      *led = CRGB::Red;
+      FastLED.show();
     }
   }
 }
+
 
 void LVLPChannel::init() {
   disconnect();
@@ -115,6 +125,22 @@ float LVLPChannel::calculateExpectedOutputVoltage(uint16_t dacValue) {
   return expectedVolts;
 }
 
+void LVLPChannel::setPIDTunings(float kp, float ki, float kd) {
+  pidKp = kp;
+  pidKi = ki;
+  pidKd = kd;
+}
+
+void LVLPChannel::resetPID() {
+  if (pidKi > 0.0f) {
+      pidIntegral = loopTargetVoltage / pidKi;
+  } else {
+      pidIntegral = 0.0f;
+  }
+  pidPrevError = 0.0f;
+  pidLastTime = millis();
+}
+
 bool LVLPChannel::setMode(LVLPMode mode) {
   if (channelStatus != STATUS_NORMAL && mode != MODE_HIGH_IMPEDANCE) {
     return false; // Prevent enabling channel if in a FAIL state
@@ -125,12 +151,19 @@ bool LVLPChannel::setMode(LVLPMode mode) {
     return false;
   }
 
+  if (mode != channelMode) {
+    if (mode == MODE_CURRENT_SOURCE || mode == MODE_RESISTIVE_LOAD) {
+      resetPID();
+    }
+  }
+
   channelMode = mode;
 
   if (mode == MODE_HIGH_IMPEDANCE) {
     disconnect();
     // Set PWM pin LOW when disconnected
     if (pwmPin >= 0) {
+      pinMode(pwmPin, OUTPUT);
       digitalWrite(pwmPin, LOW);
     }
   } else {
@@ -141,6 +174,7 @@ bool LVLPChannel::setMode(LVLPMode mode) {
     // For channels 1 to 4 (which have pwmPin >= 0),
     // the PWM pin must be set HIGH to operate the op-amp properly as a source.
     if (pwmPin >= 0 && mode != MODE_PWM_GENERATOR) {
+      pinMode(pwmPin, OUTPUT);
       digitalWrite(pwmPin, HIGH);
     }
   }
@@ -181,6 +215,7 @@ bool LVLPChannel::setPwm(uint8_t dutycycle, uint32_t frequency) {
   if (pwmPin < 0 || channelMode != MODE_PWM_GENERATOR)
     return false;
 
+  analogWriteResolution( 8);
   analogWriteFrequency(frequency);
   analogWrite(pwmPin, dutycycle);
   return true;
@@ -198,6 +233,7 @@ uint16_t LVLPChannel::readMCP3208Value() {
 }
 
 float LVLPChannel::readCurrent() {
+  delay(1);
   float voutActual = readVoltage();
   // V_before_shunt is roughly what we command the DAC to generate
   float vBeforeShunt =
@@ -232,27 +268,37 @@ void LVLPChannel::update() {
   if (channelMode == MODE_CURRENT_SOURCE ||
       channelMode == MODE_RESISTIVE_LOAD) {
     float actualCurrent = readCurrent();
+    
+    uint32_t now = millis();
+    float dt = (now - pidLastTime) / 1000.0f; // time in seconds
+    if (dt <= 0.0f) dt = 0.001f;
+    
     float error = targetCurrent - actualCurrent;
-
-    // Simple incremental step depending on error margin
-    // E.g. ~10mV step adjustment
-    float step = 0.01;
-
-    if (abs(error) > 0.005) { // 5mA deadband
-      if (actualCurrent < targetCurrent) {
-        loopTargetVoltage += step;
-      } else {
-        loopTargetVoltage -= step;
-      }
-
-      // Saturation limits (assume 15V rail as theoretical maximum)
-      if (loopTargetVoltage > 15.0)
-        loopTargetVoltage = 15.0;
-      if (loopTargetVoltage < 0.0)
-        loopTargetVoltage = 0.0;
-
-      dac->setChannelValue(dacChannel, calculateDacValue(loopTargetVoltage));
+    
+    pidIntegral += error * dt;
+    
+    // Anti-windup: limit integral term
+    float maxIntegral = 15.0f;
+    if (pidKi > 0.0f) {
+        maxIntegral = 15.0f / pidKi;
     }
+    if (pidIntegral > maxIntegral) pidIntegral = maxIntegral;
+    if (pidIntegral < 0.0f) pidIntegral = 0.0f;
+    
+    float derivative = (error - pidPrevError) / dt;
+    
+    loopTargetVoltage = (pidKp * error) + (pidKi * pidIntegral) + (pidKd * derivative);
+
+    // Saturation limits (assume 15V rail as theoretical maximum)
+    if (loopTargetVoltage > 15.0f)
+      loopTargetVoltage = 15.0f;
+    if (loopTargetVoltage < 0.0f)
+      loopTargetVoltage = 0.0f;
+
+    dac->setChannelValue(dacChannel, calculateDacValue(loopTargetVoltage));
+    
+    pidPrevError = error;
+    pidLastTime = now;
   }
 }
 

@@ -61,6 +61,14 @@ private:
     float targetCurrent;
     float loopTargetVoltage; 
 
+    // PID variables
+    float pidKp;
+    float pidKi;
+    float pidKd;
+    float pidIntegral;
+    float pidPrevError;
+    uint32_t pidLastTime;
+
     float channelVoltageOut;
     float channelCurrentOut;
 
@@ -96,6 +104,9 @@ public:
     void setOutputCurrent(float current);
     bool setPwm(uint8_t dutycycle, uint32_t frequency);
     void setCalibrationData(const ChannelCalibrationData& newCalData);
+    
+    void setPIDTunings(float kp, float ki, float kd);
+    void resetPID();
     
     float readVoltage();
     uint16_t readMCP3208Value();
