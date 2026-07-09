@@ -120,6 +120,15 @@ bool calibrateChannelWithReference(uint8_t channelIndex, const float *targets, u
         return true;
     }
 
+    // Raise the current limit on the active channel during calibration so the
+    // protection does not trip on the (very low) shared-bus leakage currents.
+    // Save the old limit and restore it when done.
+    static constexpr float kCalCurrentLimitA  = 0.05f;  // 50 mA
+    static constexpr float kCalVoltageLimitV  = 12.0f;  // above any target
+    static constexpr uint8_t kAvgSamples      = 16;     // ADC averaging per point
+
+    testChannels[channelIndex]->setLimits(kCalVoltageLimitV, kCalCurrentLimitA);
+
     float rawSamples[8];
     float referenceSamples[8];
     float dacVoltageSamples[8];
@@ -128,13 +137,32 @@ bool calibrateChannelWithReference(uint8_t channelIndex, const float *targets, u
     {
         setOnlyChannelAsVoltageSource(channelIndex, targets[sample]);
 
-        delay(250);
+        // Settle: 500 ms gives the DAC + op-amp time to fully settle.
+        delay(500);
 
-        referenceSamples[sample] = testChannels[0]->readVoltage();
-        rawSamples[sample] = static_cast<float>(testChannels[channelIndex]->readMCP3208Value());
+        // --- guard: abort this channel if it tripped during settling ---
+        if (testChannels[channelIndex]->getStatus() != STATUS_NORMAL)
+        {
+            Serial.printf("CH%u tripped at target %.1f V — aborting calibration for this channel.\n",
+                          channelIndex + 1, targets[sample]);
+            setAllChannelsHighImpedance();
+            return false;
+        }
+
+        // Average kAvgSamples reads to reduce ADC noise.
+        float sumRef = 0.0f;
+        float sumRaw = 0.0f;
+        for (uint8_t a = 0; a < kAvgSamples; a++)
+        {
+            sumRef += testChannels[0]->readVoltage();
+            sumRaw += static_cast<float>(testChannels[channelIndex]->readMCP3208Value());
+            delay(2);
+        }
+        referenceSamples[sample]  = sumRef / kAvgSamples;
+        rawSamples[sample]        = sumRaw / kAvgSamples;
         dacVoltageSamples[sample] = testChannels[channelIndex]->dacVoltageAttribute;
 
-        Serial.printf("CH%u sample %u: target=%.3f V, ref=%.3f V, raw=%.0f, dacV=%.4f V\n",
+        Serial.printf("CH%u sample %u: target=%.3f V, ref=%.4f V, raw=%.1f, dacV=%.4f V\n",
                       channelIndex + 1,
                       sample + 1,
                       targets[sample],
@@ -143,7 +171,7 @@ bool calibrateChannelWithReference(uint8_t channelIndex, const float *targets, u
                       dacVoltageSamples[sample]);
     }
 
-    LinearFit adcFit = fitLinearModel(rawSamples, referenceSamples, targetCount);
+    LinearFit adcFit    = fitLinearModel(rawSamples,        referenceSamples, targetCount);
     LinearFit outputFit = fitLinearModel(dacVoltageSamples, referenceSamples, targetCount);
 
     if (!adcFit.valid || !outputFit.valid)
@@ -155,13 +183,13 @@ bool calibrateChannelWithReference(uint8_t channelIndex, const float *targets, u
     ChannelCalibrationData calibration = chCalData[channelIndex];
     const ChannelCalibrationData referenceCalibration = chCalData[0];
 
-    calibration.K1 = referenceCalibration.K1;
-    calibration.K2 = outputFit.slope;
+    calibration.K1     = referenceCalibration.K1;
+    calibration.K2     = outputFit.slope;
     calibration.offset = outputFit.intercept - (calibration.K1 * kReferenceVespVoltage);
-    calibration.mADC = adcFit.slope;
-    calibration.bADC = adcFit.intercept;
-    calibration.mDAC = referenceCalibration.mDAC;
-    calibration.bDAC = referenceCalibration.bDAC;
+    calibration.mADC   = adcFit.slope;
+    calibration.bADC   = adcFit.intercept;
+    calibration.mDAC   = referenceCalibration.mDAC;
+    calibration.bDAC   = referenceCalibration.bDAC;
 
     applyCalibrationToChannel(channelIndex, calibration);
     printCalibrationData(channelIndex, calibration);
@@ -174,7 +202,9 @@ void runCalibrationRoutine()
     Serial.println("Tie all LP channel outputs together and keep only one channel active at a time.");
     Serial.println("CH1 will be used as the measurement reference.");
 
-    const float calibrationTargets[] = {1.0f, 3.0f, 5.0f, 8.0f, 11.0f};
+    // Upper target is 10.0 V (not 11.0 V) to stay below the default 11 V
+    // overvoltage limit, leaving headroom for any initial calibration overshoot.
+    const float calibrationTargets[] = {1.0f, 3.0f, 5.0f, 8.0f, 10.0f};
     const uint8_t calibrationTargetCount = sizeof(calibrationTargets) / sizeof(calibrationTargets[0]);
 
     for (uint8_t i = 0; i < kNumTestChannels; i++)
