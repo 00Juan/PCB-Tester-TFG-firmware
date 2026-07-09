@@ -269,7 +269,7 @@ void setup()
 
     pinMode(pinSrOe, OUTPUT);
     digitalWrite(pinSrOe, LOW);
-    sr.setAllHigh();
+    sr.setAllLow();
 
     initializeWS2812B();
     initializeEncoder(-100, 100, true);
@@ -288,6 +288,8 @@ void setup()
     else
     {
         Serial.println("Initialization complete. Starting test cycle on all channels.");
+         sr.set(8,LOW); 
+         delay(1000);
         for (uint8_t i = 0; i < kNumTestChannels; i++)
         {
             testChannels[i]->setLimits(10, 0.07);
@@ -299,7 +301,8 @@ void setup()
         testChannels[0]->setOutputVoltage(1.5);
          testChannels[1]->setMode(MODE_VOLTAGE_SOURCE);
         testChannels[1]->setOutputVoltage(1.5);
-        delay(2);
+        delay(1000);
+        sr.set(8,HIGH); 
     }
 
     delay(1000);
