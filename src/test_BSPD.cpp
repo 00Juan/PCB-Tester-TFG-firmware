@@ -303,7 +303,7 @@ static void configureTests() {
         .senseChannelMask = MASK_SDC,
         .expectedVoltage = 0.0f,
         .toleranceVolts = 1.0f,
-        .settleMs = 11000 // Wait 11s to prove it does NOT recover to 12V
+        .settleMs = 15000 // Wait 11s to prove it does NOT recover to 12V
     };
     runner.addTest(tc);
   }
