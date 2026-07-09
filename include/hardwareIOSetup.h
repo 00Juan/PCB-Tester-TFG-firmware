@@ -153,6 +153,47 @@ HPCH hpChannels[2] = {
     HPCH(2, &adc2, MCP3208::Channel::SINGLE_3, MCP3208::Channel::SINGLE_7, MCP3208::Channel::SINGLE_4, &sr, 9, hpCalData[1], &leds[9])
 };
 
+#include "HVChannel.h"
+
+// ============================================================================
+// HV Channel configuration
+// NOTE: Adjust ADC channel, SR pin, and LED index to match your hardware.
+//
+// Default calibration is identity (no real points) — run the calibration
+// routine (test_HVChannel environment) to populate real values and paste
+// the output back here.
+// ============================================================================
+HVChannelCalibrationData hvCalData = {
+    /* deadZoneRaw */ 100,
+    /* points[] */ {
+        {  100, 25.229999542f },  // [0] 25.2300 V
+        {  118, 30.159999847f },  // [1] 30.1600 V
+        {  176, 44.369998932f },  // [2] 44.3700 V
+        {  243, 61.130001068f },  // [3] 61.1300 V
+        {    0, 0.0f },             // [4] unused
+        {    0, 0.0f },             // [5] unused
+        {    0, 0.0f },             // [6] unused
+        {    0, 0.0f },             // [7] unused
+        {    0, 0.0f },             // [8] unused
+        {    0, 0.0f },             // [9] unused
+        {    0, 0.0f },             // [10] unused
+        {    0, 0.0f },             // [11] unused
+        {    0, 0.0f },             // [12] unused
+        {    0, 0.0f },             // [13] unused
+        {    0, 0.0f },             // [14] unused
+        {    0, 0.0f },             // [15] unused
+    },
+     4,
+    3.269999981f
+};
+
+// HVChannel instance
+// HVCh1: ADC2_5 (voltage sense), SR_10, LED_10
+// Adjust the ADC channel and SR/LED pin indices to match your PCB layout.
+HVChannel hvChannels[1] = {
+  HVChannel(1, &adc2, MCP3208::Channel::SINGLE_5, &sr, 10, hvCalData, &leds[10])
+};
+
 
 // ============================================================================
 // CONFIGURATION
