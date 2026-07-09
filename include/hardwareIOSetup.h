@@ -130,8 +130,29 @@ LVLPChannel lvlpChannels[8] = {
     LVLPChannel(7, &adc1, MCP3208::Channel::SINGLE_6, &DAC2, MCP4728_CHANNEL_C,
                 &sr, 6, -1, chCalData[6], &leds[6]),
     // CH8: DAC2_D, ADC1_7, SR_7, No PWM
-    LVLPChannel(8, &adc1, MCP3208::Channel::SINGLE_7, &DAC2, MCP4728_CHANNEL_D,
-                &sr, 7, -1, chCalData[7], &leds[7])};
+    LVLPChannel(8, &adc1, MCP3208::Channel::SINGLE_7, &DAC2, MCP4728_CHANNEL_D, &sr, 7, -1, chCalData[7],&leds[7])
+};
+
+#include "HPCH.h"
+
+// Default calibration data for HPCH (assuming 5k1/1k voltage divider -> 6.1 ratio)
+HPCHCalibrationData hpCalData[2] = {
+    // mADC_VIn, bADC_VIn, mADC_VOut, bADC_VOut, sensitivity, vref
+    { 0.005075289f, 0.015266559f, 0.005192232f, 0.008624060f, 0.132556796f, 3.269999981f }, // HPCH1, // HPCH 1
+    { 0.005094961f, 0.466436088f, 0.005202507f, 0.007445905f, 0.131758332f, 3.269999981f }  // HPCH 2
+};
+
+
+
+// HPCH Channels configuration
+HPCH hpChannels[2] = {
+    // HPCH1: ADC2_0 (VIn), ADC2_1 (VOut), ADC2_2 (Current), SR_8, LED_8
+    HPCH(1, &adc2, MCP3208::Channel::SINGLE_0, MCP3208::Channel::SINGLE_1, MCP3208::Channel::SINGLE_2, &sr, 8, hpCalData[0], &leds[8]),
+    
+    // HPCH2: ADC2_3 (VIn), ADC2_4 (VOut), ADC2_5 (Current), SR_9, LED_9
+    HPCH(2, &adc2, MCP3208::Channel::SINGLE_3, MCP3208::Channel::SINGLE_7, MCP3208::Channel::SINGLE_4, &sr, 9, hpCalData[1], &leds[9])
+};
+
 
 // ============================================================================
 // CONFIGURATION
