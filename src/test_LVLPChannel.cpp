@@ -290,11 +290,16 @@ void setup()
         Serial.println("Initialization complete. Starting test cycle on all channels.");
         for (uint8_t i = 0; i < kNumTestChannels; i++)
         {
-            testChannels[i]->setLimits(12, 0.04);
+            testChannels[i]->setLimits(10, 0.07);
             testChannels[i]->setMode(MODE_HIGH_IMPEDANCE);
             testChannels[i]->setOutputVoltage(0);
 
         }
+        testChannels[0]->setMode(MODE_VOLTAGE_SOURCE);
+        testChannels[0]->setOutputVoltage(1.5);
+         testChannels[1]->setMode(MODE_VOLTAGE_SOURCE);
+        testChannels[1]->setOutputVoltage(1.5);
+        delay(2);
     }
 
     delay(1000);
@@ -303,6 +308,7 @@ void setup()
 void loop()
 {
     bool botEncoder = digitalRead(pinEncoderSw);
+    static int cont=0;
     if (!botEncoder)
     {
         // for (uint8_t i = 0; i < kNumTestChannels; i++)
@@ -312,11 +318,28 @@ void loop()
         //         testChannels[i]->resetStatus();
         //     }
         // }
+
+        if(cont%2==0)
+        {
         testChannels[0]->setMode(MODE_VOLTAGE_SOURCE);
-        testChannels[0]->setOutputVoltage(2);
+        testChannels[0]->setOutputVoltage(4);
+         testChannels[1]->setMode(MODE_VOLTAGE_SOURCE);
+        testChannels[1]->setOutputVoltage(4);
         delay(2);
+        }
+        else
+        {
+                       testChannels[0]->setMode(MODE_VOLTAGE_SOURCE);
+        testChannels[0]->setOutputVoltage(1.5);
+         testChannels[1]->setMode(MODE_VOLTAGE_SOURCE);
+        testChannels[1]->setOutputVoltage(1.5);
+        delay(2);
+        }
+   
+        cont++;
         
     }
+    else if(botEncoder)
 
     for (uint8_t i = 0; i < kNumTestChannels; i++)
     {

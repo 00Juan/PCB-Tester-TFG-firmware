@@ -55,6 +55,7 @@ enum TestType : uint8_t {
     TEST_SHORT_CIRCUIT_PROTECTION,///< Force channel into short, verify fault fires within timeout
     TEST_LOAD_REGULATION,         ///< Measure voltage drop from no-load to loaded condition
     TEST_CROSS_CHANNEL_ISOLATION, ///< Drive one channel, verify neighbours stay near 0 V
+    TEST_STATIC_VOLTAGE,          ///< Passively measure voltage on channels after a delay
 };
 
 // ============================================================================
@@ -241,6 +242,21 @@ struct CrossChannelIsolationParams {
     float    maxCouplingVolts;   ///< Maximum tolerated voltage on checked channels (V)
 };
 
+/**
+ * TEST_STATIC_VOLTAGE
+ *
+ * Passively read the voltage on senseChannelMask after settleMs.
+ * PASS if |measured - expectedVoltage| <= toleranceVolts on all channels.
+ *
+ * measuredValue = worst-case error from expected (V).
+ */
+struct StaticVoltageParams {
+    uint8_t  senseChannelMask;   ///< Channel(s) to read
+    float    expectedVoltage;    ///< Target voltage (V)
+    float    toleranceVolts;     ///< Allowed error band (V)
+    uint32_t settleMs;           ///< Delay before sampling (ms)
+};
+
 // ============================================================================
 // DUT SETUP CALLBACK
 // ============================================================================
@@ -275,6 +291,7 @@ struct TestCase {
         ShortCircuitProtectionParams shortCircuit;
         LoadRegulationParams         loadRegulation;
         CrossChannelIsolationParams  crossChannelIsolation;
+        StaticVoltageParams          staticVoltage;
     };
 };
 
@@ -368,6 +385,7 @@ private:
     TestResult runShortCircuitProtectionTest(const TestCase& tc);
     TestResult runLoadRegulationTest       (const TestCase& tc);
     TestResult runCrossChannelIsolationTest(const TestCase& tc);
+    TestResult runStaticVoltageTest        (const TestCase& tc);
 
     // -------------------------------------------------------------------------
     // Helpers

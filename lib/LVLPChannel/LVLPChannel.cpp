@@ -215,9 +215,31 @@ bool LVLPChannel::setPwm(uint8_t dutycycle, uint32_t frequency) {
   if (pwmPin < 0 || channelMode != MODE_PWM_GENERATOR)
     return false;
 
-  analogWriteResolution( 8);
-  analogWriteFrequency(frequency);
-  analogWrite(pwmPin, dutycycle);
+  uint8_t ledcChannel;
+  switch (pwmPin) {
+    case 14:
+      ledcChannel = 0;
+      break;
+    case 15:
+      ledcChannel = 1;
+      break;
+    case 16:
+      ledcChannel = 2;
+      break;
+    case 10:
+      ledcChannel = 3;
+      break;
+    default:
+      return false;
+  }
+
+  constexpr uint8_t pwmResolutionBits = 8;
+  if (!ledcSetup(ledcChannel, frequency, pwmResolutionBits)) {
+    return false;
+  }
+
+  ledcAttachPin(pwmPin, ledcChannel);
+  ledcWrite(ledcChannel, dutycycle);
   return true;
 }
 

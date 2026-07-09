@@ -84,6 +84,7 @@ TestResult DUTTestRunner::runOne(uint8_t index) {
         case TEST_SHORT_CIRCUIT_PROTECTION: result = runShortCircuitProtectionTest(tc);  break;
         case TEST_LOAD_REGULATION:          result = runLoadRegulationTest(tc);          break;
         case TEST_CROSS_CHANNEL_ISOLATION:  result = runCrossChannelIsolationTest(tc);   break;
+        case TEST_STATIC_VOLTAGE:           result = runStaticVoltageTest(tc);           break;
         default:
             result.testName      = tc.name;
             result.outcome       = OUTCOME_ERROR;
@@ -120,9 +121,9 @@ TestResult DUTTestRunner::runVoltageThresholdTest(const TestCase& tc) {
     r.measuredValue = 0.0f;
 
     // Validate masks
-    if (p.driveChannelMask == 0 || p.senseChannelMask == 0) {
+    if (p.senseChannelMask == 0) {
         r.outcome = OUTCOME_ERROR;
-        snprintf(r.details, sizeof(r.details), "Drive or sense channel mask is 0");
+        snprintf(r.details, sizeof(r.details), "Sense channel mask is 0");
         r.elapsedMs = 0;
         return r;
     }
@@ -211,19 +212,19 @@ TestResult DUTTestRunner::runVoltageAccuracyTest(const TestCase& tc) {
     }
 
     r.elapsedMs     = (uint32_t)(millis() - t0);
-    r.measuredValue = worstError;   // Report worst-case error
-    r.expectedValue = p.toleranceVolts;
+    r.measuredValue = worstMeas;    // Report the actual channel voltage
+    r.expectedValue = p.targetVoltage;
 
     if (worstError <= p.toleranceVolts) {
         r.outcome = OUTCOME_PASS;
         snprintf(r.details, sizeof(r.details),
-                 "Max error: %.4f V on CH%u (measured %.4f V, target %.4f V)",
-                 worstError, worstCh + 1, worstMeas, p.targetVoltage);
+                 "Voltage %.4f V (target %.4f V) err %.4f V <= tol %.4f V on CH%u",
+                 worstMeas, p.targetVoltage, worstError, p.toleranceVolts, worstCh + 1);
     } else {
         r.outcome = OUTCOME_FAIL;
         snprintf(r.details, sizeof(r.details),
-                 "Error %.4f V > tol %.4f V on CH%u (meas %.4f V, target %.4f V)",
-                 worstError, p.toleranceVolts, worstCh + 1, worstMeas, p.targetVoltage);
+                 "Voltage %.4f V (target %.4f V) err %.4f V > tol %.4f V on CH%u",
+                 worstMeas, p.targetVoltage, worstError, p.toleranceVolts, worstCh + 1);
     }
 
     return r;
@@ -772,6 +773,61 @@ TestResult DUTTestRunner::runCrossChannelIsolationTest(const TestCase& tc) {
         snprintf(r.details, sizeof(r.details),
                  "Coupling %.4f V on CH%u > limit %.4f V",
                  worstCoupling, worstCh + 1, p.maxCouplingVolts);
+    }
+
+    return r;
+}
+
+// ----------------------------------------------------------------------------
+// 11. STATIC VOLTAGE
+// ----------------------------------------------------------------------------
+TestResult DUTTestRunner::runStaticVoltageTest(const TestCase& tc) {
+    const StaticVoltageParams& p = tc.staticVoltage;
+
+    TestResult r;
+    r.testName      = tc.name;
+    r.expectedValue = p.expectedVoltage;
+    r.measuredValue = 0.0f;
+
+    if (p.senseChannelMask == 0) {
+        r.outcome = OUTCOME_ERROR;
+        snprintf(r.details, sizeof(r.details), "Sense channel mask is 0");
+        r.elapsedMs = 0;
+        return r;
+    }
+
+    uint32_t t0 = millis();
+    delay(p.settleMs);
+
+    float worstError = 0.0f;
+    uint8_t worstCh  = 0;
+    float   worstMeas = 0.0f;
+
+    for (uint8_t i = 0; i < chCount_; i++) {
+        if (!(p.senseChannelMask & (1 << i))) continue;
+        float meas = sampleAverageVoltage(i, 8);
+        float err  = fabsf(meas - p.expectedVoltage);
+        if (err > worstError) {
+            worstError = err;
+            worstCh    = i;
+            worstMeas  = meas;
+        }
+    }
+
+    r.elapsedMs     = (uint32_t)(millis() - t0);
+    r.measuredValue = worstMeas;
+    r.expectedValue = p.expectedVoltage;
+
+    if (worstError <= p.toleranceVolts) {
+        r.outcome = OUTCOME_PASS;
+        snprintf(r.details, sizeof(r.details),
+                 "Voltage %.4f V (target %.4f V) err %.4f V <= tol %.4f V on CH%u",
+                 worstMeas, p.expectedVoltage, worstError, p.toleranceVolts, worstCh + 1);
+    } else {
+        r.outcome = OUTCOME_FAIL;
+        snprintf(r.details, sizeof(r.details),
+                 "Voltage %.4f V (target %.4f V) err %.4f V > tol %.4f V on CH%u",
+                 worstMeas, p.expectedVoltage, worstError, p.toleranceVolts, worstCh + 1);
     }
 
     return r;

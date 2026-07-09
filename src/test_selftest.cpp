@@ -213,6 +213,18 @@ static void dut_shortCircuit() {
  */
 // dutSetup = nullptr
 
+/**
+ * TEST 11 — STATIC VOLTAGE
+ * Scenario:
+ *   - CH5 drives node A at 3.3V
+ *   - CH1 passively reads node A
+ *
+ * Expected: PASS, measured voltage within ±0.15 V of 3.3 V
+ */
+static void dut_staticVoltage() {
+    dutDrive(4, 3.3f);   // CH5 drives 3.3V
+}
+
 // ============================================================================
 // TESTBENCH INSTANCE
 // ============================================================================
@@ -355,7 +367,7 @@ static void configureSelftests() {
             .senseChannelMask = 0x10,   // CH5 reads node A average
             .driveVoltage     = 3.3f,
             .dutyCycle        = 128,    // ≈ 50 %
-            .frequency        = 10,   // 1 kHz
+            .frequency        = 10,    // 10 Hz
             .settleMs         = 300,    // 300 ms → 300 full PWM cycles averaged
             .toleranceVolts   = 0.35f   // generous: ADC sampling may alias
         };
@@ -423,6 +435,23 @@ static void configureSelftests() {
             .driveVoltage     = 5.0f,
             .settleMs         = 100,
             .maxCouplingVolts = 0.15f   // 150 mV
+        };
+        runner.addTest(tc);
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 11 — Static voltage  (CH1 passively measures CH5's drive)
+    // -----------------------------------------------------------------------
+    {
+        TestCase tc;
+        tc.name     = "CH1 static voltage read (CH5 drives 3.3V)";
+        tc.type     = TEST_STATIC_VOLTAGE;
+        tc.dutSetup = dut_staticVoltage;
+        tc.staticVoltage = {
+            .senseChannelMask = 0x01,   // CH1 senses node A
+            .expectedVoltage  = 3.3f,
+            .toleranceVolts   = 0.15f,
+            .settleMs         = 100
         };
         runner.addTest(tc);
     }
