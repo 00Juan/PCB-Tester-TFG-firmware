@@ -501,7 +501,7 @@ void setup() {
     configureSelftests();
 
     Serial.println(F("=== Starting self-test sequence ===\n"));
-    runner.runAll();
+    runner.runAll(&u8g2);
 
     // Show summary on OLED
     runner.displaySummary(&u8g2);

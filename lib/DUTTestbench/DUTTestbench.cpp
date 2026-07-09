@@ -36,13 +36,39 @@ void DUTTestRunner::clearTests() {
 // Run all / run one
 // ============================================================================
 
-void DUTTestRunner::runAll() {
+void DUTTestRunner::runAll(U8G2* display) {
+    display_ = display;
     Serial.println(F("\n========================================"));
     Serial.println(F("  DUT Testbench — Starting test run"));
     Serial.printf ("  Total tests: %u\n", testCount_);
     Serial.println(F("========================================\n"));
 
     for (uint8_t i = 0; i < testCount_; i++) {
+        if (display) {
+            display->clearBuffer();
+            display->setFont(u8g2_font_5x8_mr);
+            
+            char header[24];
+            snprintf(header, sizeof(header), "Running %u/%u", i + 1, testCount_);
+            display->drawStr(0, 12, header);
+            
+            display->drawStr(0, 26, "Test:");
+            
+            char line1[22] = {0};
+            char line2[22] = {0};
+            const char* tname = tests_[i].name;
+            strncpy(line1, tname, 21);
+            if (strlen(tname) > 21) {
+                strncpy(line2, tname + 21, 21);
+            }
+            
+            display->drawStr(0, 40, line1);
+            if (line2[0] != '\0') {
+                display->drawStr(0, 50, line2);
+            }
+            display->sendBuffer();
+        }
+
         results_[i] = runOne(i); // safetyDisconnectAll + dutSetup handled inside
         delay(50);               // brief inter-test pause
     }
@@ -136,6 +162,7 @@ TestResult DUTTestRunner::runVoltageThresholdTest(const TestCase& tc) {
     bool     allOk   = false;
 
     while (!allOk && (millis() - t0) < p.timeoutMs) {
+        updateRealtimeDisplay(tc.name, millis() - t0, p.timeoutMs);
         allOk = true;
         for (uint8_t i = 0; i < chCount_; i++) {
             if (!(p.senseChannelMask & (1 << i))) continue;
@@ -192,7 +219,7 @@ TestResult DUTTestRunner::runVoltageAccuracyTest(const TestCase& tc) {
 
     uint32_t t0 = millis();
     applyChannelMask(p.channelMask, MODE_VOLTAGE_SOURCE, p.targetVoltage);
-    delay(p.settleMs);
+    waitAndDisplay(p.settleMs, tc.name);
 
     uint8_t ns = (p.numSamples == 0 || p.numSamples > DUT_MAX_SAMPLES) ? 8 : p.numSamples;
 
@@ -253,7 +280,7 @@ TestResult DUTTestRunner::runVoltageRippleTest(const TestCase& tc) {
     if (intervalMs == 0) intervalMs = 1;
 
     applyChannelMask(p.channelMask, MODE_VOLTAGE_SOURCE, p.driveVoltage);
-    delay(100); // initial settle
+    waitAndDisplay(100, tc.name); // initial settle
 
     uint32_t t0 = millis();
 
@@ -264,15 +291,11 @@ TestResult DUTTestRunner::runVoltageRippleTest(const TestCase& tc) {
         if (!(p.channelMask & (1 << i))) continue;
 
         float vmin = 1e9f, vmax = -1e9f;
-        float sum = 0.0f;
-        float sumSq = 0.0f;
-
+        
         for (uint8_t s = 0; s < ns; s++) {
             float v = ch_[i]->readVoltage();
             if (v < vmin) vmin = v;
             if (v > vmax) vmax = v;
-            sum   += v;
-            sumSq += v * v;
             delay(intervalMs);
         }
 
@@ -321,7 +344,7 @@ TestResult DUTTestRunner::runCurrentConsumptionTest(const TestCase& tc) {
 
     uint32_t t0 = millis();
     applyChannelMask(p.channelMask, MODE_VOLTAGE_SOURCE, p.driveVoltage);
-    delay(p.settleMs);
+    waitAndDisplay(p.settleMs, tc.name);
 
     uint8_t ns = (p.numSamples == 0 || p.numSamples > DUT_MAX_SAMPLES) ? 8 : p.numSamples;
 
@@ -405,6 +428,7 @@ TestResult DUTTestRunner::runCurrentInrushTest(const TestCase& tc) {
     }
 
     while ((millis() - t0) < p.windowMs && sampleCount < DUT_MAX_SAMPLES) {
+        updateRealtimeDisplay(tc.name, millis() - t0, p.windowMs);
         float c = ch_[repCh]->readCurrent();
         samples[sampleCount] = c;
         if (fabsf(c) > fabsf(peakCurrent)) {
@@ -467,7 +491,7 @@ TestResult DUTTestRunner::runPowerSequenceTest(const TestCase& tc) {
 
     for (uint8_t s = 0; s < p.stepCount && s < 8; s++) {
         applyChannelMask(p.stepChannelMask[s], MODE_VOLTAGE_SOURCE, p.stepTargetVoltage[s]);
-        delay(p.stepDelayMs[s]);
+        waitAndDisplay(p.stepDelayMs[s], tc.name);
 
         // Verify all channels in this step's mask are within tolerance
         bool stepOk = true;
@@ -538,7 +562,7 @@ TestResult DUTTestRunner::runPwmIntegrityTest(const TestCase& tc) {
         ch_[i]->setPwm(p.dutyCycle, p.frequency);
     }
 
-    delay(p.settleMs);
+    waitAndDisplay(p.settleMs, tc.name);
 
     // Measure average DC on sense channels
     float worstError = 0.0f;
@@ -606,6 +630,7 @@ TestResult DUTTestRunner::runShortCircuitProtectionTest(const TestCase& tc) {
     uint32_t faultMs    = 0;
 
     while ((millis() - t0) < p.timeoutMs) {
+        updateRealtimeDisplay(tc.name, millis() - t0, p.timeoutMs);
         // Drive update loop to let channels detect over-current
         for (uint8_t i = 0; i < chCount_; i++) {
             if (!(p.channelMask & (1 << i))) continue;
@@ -666,7 +691,7 @@ TestResult DUTTestRunner::runLoadRegulationTest(const TestCase& tc) {
 
     // --- Phase 1: No-load — drive channels only, load channels at HIGH_Z ---
     applyChannelMask(p.driveChannelMask, MODE_VOLTAGE_SOURCE, p.driveVoltage);
-    delay(p.settleMs);
+    waitAndDisplay(p.settleMs, tc.name);
 
     float   vNoLoad  = 0.0f;
     uint8_t nDrive   = 0;
@@ -740,7 +765,7 @@ TestResult DUTTestRunner::runCrossChannelIsolationTest(const TestCase& tc) {
 
     uint32_t t0 = millis();
     applyChannelMask(p.driveChannelMask, MODE_VOLTAGE_SOURCE, p.driveVoltage);
-    delay(p.settleMs);
+    waitAndDisplay(p.settleMs, tc.name);
 
     // If senseChannelMask == 0, check every channel NOT in driveChannelMask.
     // Otherwise check exactly the channels in senseChannelMask.
@@ -797,7 +822,7 @@ TestResult DUTTestRunner::runStaticVoltageTest(const TestCase& tc) {
     }
 
     uint32_t t0 = millis();
-    delay(p.settleMs);
+    waitAndDisplay(p.settleMs, tc.name);
 
     float worstError = 0.0f;
     uint8_t worstCh  = 0;
@@ -957,6 +982,49 @@ float DUTTestRunner::sampleAverageCurrent(uint8_t chIdx, uint8_t numSamples) {
         if (s < numSamples - 1) delay(2);
     }
     return sum / numSamples;
+}
+
+void DUTTestRunner::updateRealtimeDisplay(const char* testName, uint32_t elapsedMs, uint32_t totalMs) {
+    if (!display_) return;
+
+    static uint32_t lastUpdate = 0;
+    if (millis() - lastUpdate < 100 && elapsedMs != totalMs) return;
+    lastUpdate = millis();
+
+    display_->clearBuffer();
+    display_->setFont(u8g2_font_5x8_mr);
+
+    char line[24];
+    strncpy(line, testName, 21);
+    line[21] = '\0';
+    display_->drawStr(0, 8, line);
+
+    if (totalMs > 0) {
+        snprintf(line, sizeof(line), "Wait: %lu/%lu ms", elapsedMs, totalMs);
+    } else {
+        snprintf(line, sizeof(line), "Time: %lu ms", elapsedMs);
+    }
+    display_->drawStr(0, 18, line);
+
+    for (uint8_t i = 0; i < 4 && i < chCount_; i++) {
+        if (ch_[i]) {
+            float v = ch_[i]->readVoltage();
+            snprintf(line, sizeof(line), "CH%u:%4.1fV", i + 1, v);
+            uint8_t x = (i % 2 == 0) ? 0 : 64;
+            uint8_t y = 32 + (i / 2) * 12;
+            display_->drawStr(x, y, line);
+        }
+    }
+    display_->sendBuffer();
+}
+
+void DUTTestRunner::waitAndDisplay(uint32_t waitMs, const char* testName) {
+    uint32_t start = millis();
+    while (millis() - start < waitMs) {
+        updateRealtimeDisplay(testName, millis() - start, waitMs);
+        delay(10);
+    }
+    updateRealtimeDisplay(testName, waitMs, waitMs);
 }
 
 const char* DUTTestRunner::outcomeStr(TestOutcome o) {

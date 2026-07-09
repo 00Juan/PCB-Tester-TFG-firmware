@@ -346,7 +346,7 @@ void setup() {
 
   while(digitalRead(pinEncoderSw));
   Serial.println(F("=== Running BSPD Tests ===\n"));
-  runner.runAll();
+  runner.runAll(&u8g2);
 
   runner.displaySummary(&u8g2);
 }

@@ -322,10 +322,16 @@ public:
     void clearTests();
 
     /**
+     * @brief Set the OLED display for real-time updates.
+     */
+    void setDisplay(U8G2* display) { display_ = display; }
+
+    /**
      * @brief Run all queued tests sequentially (blocking).
      *        Channels are left in MODE_HIGH_IMPEDANCE after each test.
+     * @param display Optional OLED display to show test progress.
      */
-    void runAll();
+    void runAll(U8G2* display = nullptr);
 
     /**
      * @brief Run a single test case by index.
@@ -372,6 +378,8 @@ private:
     TestResult results_[DUT_MAX_TESTS];
     uint8_t    testCount_;
 
+    U8G2* display_ = nullptr;
+
     // -------------------------------------------------------------------------
     // Per-type runners (called by runOne)
     // -------------------------------------------------------------------------
@@ -399,6 +407,12 @@ private:
 
     /// Samples the average voltage of a single channel (numSamples averaged)
     float sampleAverageVoltage(uint8_t chIdx, uint8_t numSamples);
+
+    /// Render test status in real-time
+    void updateRealtimeDisplay(const char* testName, uint32_t elapsedMs, uint32_t totalMs);
+
+    /// Blocking wait that updates the OLED display while waiting
+    void waitAndDisplay(uint32_t waitMs, const char* testName);
 
     /// Samples the average current of a single channel (numSamples averaged)
     float sampleAverageCurrent(uint8_t chIdx, uint8_t numSamples);
