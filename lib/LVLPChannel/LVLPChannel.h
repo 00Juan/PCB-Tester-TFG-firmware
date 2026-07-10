@@ -48,6 +48,7 @@ private:
     uint8_t srPin; // 0 to 7
     
     int8_t pwmPin; // -1 if not assigned
+    uint8_t pwmResolutionBits; // LEDC resolution (1-14 bits, default 8)
     
     LVLPMode channelMode;
     CRGB* led;
@@ -102,7 +103,10 @@ public:
     void setOutputVoltage(float voltage);
     void setDACOutput(uint16_t value);
     void setOutputCurrent(float current);
-    bool setPwm(uint8_t dutycycle, uint32_t frequency);
+    bool setPwm(uint16_t dutycycle, uint32_t frequency);
+    void setPwmResolution(uint8_t bits);
+    uint8_t getPwmResolution() const { return pwmResolutionBits; }
+    uint16_t getPwmMaxDuty()   const { return (1u << pwmResolutionBits) - 1u; }
     void setCalibrationData(const ChannelCalibrationData& newCalData);
     
     void setPIDTunings(float kp, float ki, float kd);

@@ -13,6 +13,7 @@ LVLPChannel::LVLPChannel(uint8_t chIndex, MCP3208 *adcPtr,
                          CRGB *ledPtr)
     : channelIndex(chIndex), adc(adcPtr), adcChannel(adcCh), dac(dacPtr),
       dacChannel(dacCh), sr(srPtr), srPin(srP), pwmPin(pwmP),
+      pwmResolutionBits(8),
       calData(calDataRef), channelMode(MODE_HIGH_IMPEDANCE), userTargetVoltage(0),
       targetCurrent(0), loopTargetVoltage(0), led(ledPtr),
       channelStatus(STATUS_NORMAL), maxVoltageLimit(11.0),
@@ -211,36 +212,38 @@ void LVLPChannel::setCalibrationData(const ChannelCalibrationData &newCalData) {
   calData = newCalData;
 }
 
-bool LVLPChannel::setPwm(uint8_t dutycycle, uint32_t frequency) {
+bool LVLPChannel::setPwm(uint16_t dutycycle, uint32_t frequency) {
   if (pwmPin < 0 || channelMode != MODE_PWM_GENERATOR)
     return false;
 
+  // Map the hardware GPIO control pins to fixed LEDC channels.
+  // Channels 0-3 are reserved for the four PWM-capable LVLP outputs.
   uint8_t ledcChannel;
   switch (pwmPin) {
-    case 14:
-      ledcChannel = 0;
-      break;
-    case 15:
-      ledcChannel = 1;
-      break;
-    case 16:
-      ledcChannel = 2;
-      break;
-    case 10:
-      ledcChannel = 3;
-      break;
-    default:
-      return false;
+    case 14: ledcChannel = 0; break;
+    case 15: ledcChannel = 1; break;
+    case 16: ledcChannel = 2; break;
+    case 10: ledcChannel = 3; break;
+    default: return false;
   }
 
-  constexpr uint8_t pwmResolutionBits = 8;
-  if (!ledcSetup(ledcChannel, frequency, pwmResolutionBits)) {
+  // NOTE: ledcSetup() returns double (the actual configured frequency),
+  // NOT a bool. A return value of 0.0 means the configuration failed.
+  double configuredFreq = ledcSetup(ledcChannel, frequency, pwmResolutionBits);
+  if (configuredFreq == 0.0) {
     return false;
   }
 
   ledcAttachPin(pwmPin, ledcChannel);
   ledcWrite(ledcChannel, dutycycle);
   return true;
+}
+
+void LVLPChannel::setPwmResolution(uint8_t bits) {
+  // ESP32-S3 LEDC supports 1-14 bit resolution.
+  if (bits < 1)  bits = 1;
+  if (bits > 14) bits = 14;
+  pwmResolutionBits = bits;
 }
 
 float LVLPChannel::readVoltage() {
