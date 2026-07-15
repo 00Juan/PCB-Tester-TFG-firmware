@@ -142,10 +142,15 @@ class PCBTesterClient:
 
     def set_channel(self, ch: int, mode: str, v: Optional[float] = None,
                     i: Optional[float] = None, duty: Optional[int] = None,
-                    freq: Optional[int] = None, **kw: Any) -> Dict[str, Any]:
-        """LVLP channels (1-8). mode: HZ | VS | CS | RL | PWM."""
+                    freq: Optional[int] = None, res: Optional[int] = None,
+                    **kw: Any) -> Dict[str, Any]:
+        """LVLP channels (1-8). mode: HZ | VS | CS | RL | PWM.
+
+        For PWM, v sets the high-level amplitude (volts) and res the LEDC
+        resolution in bits (1-14); duty must fit the effective resolution.
+        """
         return self.command("ch.set", ch=ch, mode=mode, v=v, i=i,
-                            duty=duty, freq=freq, **kw)
+                            duty=duty, freq=freq, res=res, **kw)
 
     def connect_channel(self, ch: int, **kw: Any) -> Dict[str, Any]:
         """Close the relay of an HP/HV channel (9-11)."""

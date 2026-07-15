@@ -16,7 +16,9 @@
 //   {"id":1,"cmd":"hello"}
 //   {"id":2,"cmd":"ch.set","ch":1,"mode":"VS","v":3.14}
 //   {"id":3,"cmd":"ch.set","ch":1,"mode":"CS","i":0.05}
-//   {"id":4,"cmd":"ch.set","ch":1,"mode":"PWM","duty":128,"freq":1000}
+//   {"id":4,"cmd":"ch.set","ch":1,"mode":"PWM","duty":128,"freq":1000,
+//    "v":3.3,"res":8}   // v = high-level amplitude (DAC), res = LEDC bits 1-14;
+//                       // both optional, duty must fit the effective resolution
 //   {"id":5,"cmd":"ch.set","ch":1,"mode":"HZ"}
 //   {"id":6,"cmd":"ch.connect","ch":9}        // HP/HV relays only (ch 9-11)
 //   {"id":7,"cmd":"ch.disconnect","ch":9}

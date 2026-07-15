@@ -269,11 +269,27 @@ void TesterProtocol::handleLine(char* line) {
                 sendDoc(io_, res);
                 return;
             }
-            if (mode == MODE_PWM_GENERATOR
-                && (!doc["duty"].is<int>() || !doc["freq"].is<int>())) {
-                res["ok"] = false; res["err"] = "E_ARG"; res["msg"] = "PWM needs duty and freq";
-                sendDoc(io_, res);
-                return;
+            if (mode == MODE_PWM_GENERATOR) {
+                if (!doc["duty"].is<int>() || !doc["freq"].is<int>()) {
+                    res["ok"] = false; res["err"] = "E_ARG"; res["msg"] = "PWM needs duty and freq";
+                    sendDoc(io_, res);
+                    return;
+                }
+                // Optional "res" (LEDC bits) and "v" (high-level amplitude);
+                // validate duty against the effective resolution up front.
+                int pwmRes = doc["res"] | (int)lc->getPwmResolution();
+                if (pwmRes < 1 || pwmRes > 14) {
+                    res["ok"] = false; res["err"] = "E_ARG"; res["msg"] = "res must be 1-14 bits";
+                    sendDoc(io_, res);
+                    return;
+                }
+                uint32_t maxDuty = (1UL << pwmRes) - 1;
+                if (doc["duty"].as<uint32_t>() > maxDuty) {
+                    res["ok"] = false; res["err"] = "E_ARG";
+                    res["msg"] = "duty exceeds resolution max";
+                    sendDoc(io_, res);
+                    return;
+                }
             }
             if (!lc->setMode(mode)) {
                 res["ok"] = false; res["err"] = "E_STATE";
@@ -288,6 +304,13 @@ void TesterProtocol::handleLine(char* line) {
             } else if (mode == MODE_CURRENT_SOURCE || mode == MODE_RESISTIVE_LOAD) {
                 lc->setOutputCurrent(doc["i"].as<float>());
             } else if (mode == MODE_PWM_GENERATOR) {
+                if (doc["res"].is<int>()) {
+                    lc->setPwmResolution((uint8_t)doc["res"].as<int>());
+                }
+                if (doc["v"].is<float>()) {
+                    // The DAC/op-amp chain sets the PWM high level
+                    lc->setOutputVoltage(doc["v"].as<float>());
+                }
                 if (!lc->setPwm(doc["duty"].as<uint16_t>(), doc["freq"].as<uint32_t>())) {
                     lc->setMode(MODE_HIGH_IMPEDANCE);
                     res["ok"] = false; res["err"] = "E_ARG";
@@ -409,6 +432,7 @@ void TesterProtocol::emitTelemetryIfDue() {
         if (c.getMode() == MODE_PWM_GENERATOR) {
             o["duty"] = c.getPwmDuty();
             o["freq"] = c.getPwmFreq();
+            o["res"] = c.getPwmResolution();
         }
     }
 

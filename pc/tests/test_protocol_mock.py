@@ -88,6 +88,27 @@ def test_cs_requires_current_argument(client):
     assert e.value.err == "E_ARG"
 
 
+def test_pwm_amplitude_and_resolution(client):
+    client.set_channel(1, "PWM", duty=512, freq=1000, v=5.0, res=10)
+    ev = client.next_event("telem")
+    ch1 = ev["lvlp"][0]
+    assert ch1["mode"] == "PWM"
+    assert ch1["duty"] == 512
+    assert ch1["res"] == 10
+    assert ch1["vt"] == pytest.approx(5.0, abs=0.001)
+    # Average DC = amplitude * duty ratio = 5.0 * 512/1023 ≈ 2.50 V
+    assert ch1["v"] == pytest.approx(5.0 * 512 / 1023, abs=0.05)
+
+
+def test_pwm_duty_must_fit_resolution(client):
+    with pytest.raises(CommandError) as e:
+        client.set_channel(1, "PWM", duty=300, freq=1000, res=8)  # max 255
+    assert e.value.err == "E_ARG"
+    with pytest.raises(CommandError) as e:
+        client.set_channel(1, "PWM", duty=10, freq=1000, res=20)  # bits 1-14
+    assert e.value.err == "E_ARG"
+
+
 def test_pwm_only_on_ch1_to_4(client):
     client.set_channel(4, "PWM", duty=128, freq=1000)
     with pytest.raises(CommandError) as e:

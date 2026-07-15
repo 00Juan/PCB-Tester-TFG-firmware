@@ -56,6 +56,7 @@ class _Lvlp:
     imax: float = 0.5
     duty: int = 0
     freq: int = 0
+    res: int = 8                       # LEDC resolution bits (1-14)
     load_ohms: Optional[float] = None  # simulation hook
 
 
@@ -205,7 +206,8 @@ class MockTester:
                     c.i = _noise(0.0005)
                     c.v = _LVLP_RAIL_V + _noise()
             elif c.mode == "PWM":
-                c.v = 3.3 * c.duty / 255.0 + _noise()
+                # Average DC of the PWM output: amplitude (vt) x duty ratio
+                c.v = c.vt * c.duty / ((1 << c.res) - 1) + _noise()
                 c.i = _noise(0.0005)
             # Limit checks (mirror LVLPChannel::checkLimits)
             if c.v > c.vmax:
@@ -264,6 +266,7 @@ class MockTester:
             if c.mode == "PWM":
                 o["duty"] = c.duty
                 o["freq"] = c.freq
+                o["res"] = c.res
             lv.append(o)
         msg["lvlp"] = lv
         msg["hp"] = [{"ch": c.ch, "st": c.st, "conn": c.conn,
@@ -413,10 +416,18 @@ class MockTester:
             if mode in ("CS", "RL") and _num("i") is None:
                 self._ack(msg_id, False, "E_ARG", "CS/RL needs i")
                 return
-            if mode == "PWM" and (not isinstance(doc.get("duty"), int)
-                                  or not isinstance(doc.get("freq"), int)):
-                self._ack(msg_id, False, "E_ARG", "PWM needs duty and freq")
-                return
+            if mode == "PWM":
+                if (not isinstance(doc.get("duty"), int)
+                        or not isinstance(doc.get("freq"), int)):
+                    self._ack(msg_id, False, "E_ARG", "PWM needs duty and freq")
+                    return
+                pwm_res = doc.get("res", lc.res)
+                if not isinstance(pwm_res, int) or pwm_res < 1 or pwm_res > 14:
+                    self._ack(msg_id, False, "E_ARG", "res must be 1-14 bits")
+                    return
+                if doc["duty"] > (1 << pwm_res) - 1:
+                    self._ack(msg_id, False, "E_ARG", "duty exceeds resolution max")
+                    return
             # setMode guard: fault latch, PWM capability
             if lc.st != ST_NORMAL and mode != "HZ":
                 self._ack(msg_id, False, "E_STATE",
@@ -436,6 +447,10 @@ class MockTester:
             elif mode == "PWM":
                 lc.duty = doc["duty"]
                 lc.freq = doc["freq"]
+                lc.res = doc.get("res", lc.res)
+                v = _num("v")
+                if v is not None:
+                    lc.vt = v
             else:  # HZ parks the DAC at 0 V
                 lc.vt = 0.0
             self._ack(msg_id, True)

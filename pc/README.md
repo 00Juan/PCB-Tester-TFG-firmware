@@ -104,7 +104,7 @@ Channel numbering everywhere: **1–8 = LVLP**, **9–10 = HP**, **11 = HV**.
 | `hello` | `hello` | Print device identity (firmware, protocol version, channel counts) |
 | `vs <ch> <volts>` | `vs 1 3.3` | LVLP channel → voltage source |
 | `cs <ch> <amps>` | `cs 2 0.05` | LVLP channel → current source |
-| `pwm <ch> <duty> <freq>` | `pwm 1 128 1000` | PWM generator, duty 0–255, freq in Hz (CH1–CH4 only) |
+| `pwm <ch> <duty> <freq> [v] [res]` | `pwm 1 512 1000 5.0 10` | PWM generator (CH1–CH4): duty 0…2^res−1, freq in Hz, optional amplitude in V and resolution in bits (1–14, default 8) |
 | `hz <ch>` | `hz 1` | High impedance: relay open, DAC parked at 0 V |
 | `on <ch>` / `off <ch>` | `on 9` | Close / open an HP or HV relay (ch 9–11 only) |
 | `limits <ch> <vmax> [imax]` | `limits 1 5 0.1` | Protection limits; `imax` required except for ch 11 |
@@ -131,7 +131,9 @@ serial monitor. One JSON object per line; every command carries a client-chosen
 {"id":1,"cmd":"hello"}
 {"id":2,"cmd":"ch.set","ch":1,"mode":"VS","v":3.14}     // mode: HZ|VS|CS|RL|PWM
 {"id":3,"cmd":"ch.set","ch":1,"mode":"CS","i":0.05}     // CS/RL need "i"
-{"id":4,"cmd":"ch.set","ch":1,"mode":"PWM","duty":128,"freq":1000}
+{"id":4,"cmd":"ch.set","ch":1,"mode":"PWM","duty":512,"freq":1000,"v":5.0,"res":10}
+                                                        // v = amplitude (optional), res = bits 1-14
+                                                        // (optional, default 8); duty must be < 2^res
 {"id":5,"cmd":"ch.set","ch":1,"mode":"HZ"}
 {"id":6,"cmd":"ch.connect","ch":9}                      // HP/HV relays only (9-11)
 {"id":7,"cmd":"ch.disconnect","ch":9}
@@ -183,7 +185,7 @@ Unsolicited events (no `id`), pushed by the device:
 
 `st` status codes: 0 = normal, 1 = overcurrent, 2 = overvoltage, 3 = other
 (HV: 0 = normal, 1 = overvoltage, 2 = other). PWM channels also report
-`duty`/`freq` in telemetry. Once faulted, a channel refuses everything except
+`duty`/`freq`/`res` in telemetry (`vt` is the PWM amplitude). Once faulted, a channel refuses everything except
 `ch.reset` — that's the same latch the firmware's LEDs show in red/blue.
 
 ### Python client methods

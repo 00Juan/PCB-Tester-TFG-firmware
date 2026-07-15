@@ -12,8 +12,8 @@ from typing import Callable, Dict, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QFrame,
-    QHBoxLayout, QLabel, QPushButton, QSpinBox, QStackedWidget, QVBoxLayout,
-    QWidget,
+    QGridLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox, QStackedWidget,
+    QVBoxLayout, QWidget,
 )
 
 # st code → (label, dot color); index 0 handled from conn state
@@ -107,15 +107,25 @@ class LvlpCard(_CardBase):
                                         singleStep=0.01)
         self.params.addWidget(self._wrap(self.i_spin_rl))  # RL
 
-        pwm_row = QWidget()
-        pl = QHBoxLayout(pwm_row)
+        pwm_page = QWidget()
+        pl = QGridLayout(pwm_page)
         pl.setContentsMargins(0, 0, 0, 0)
-        self.duty_spin = QSpinBox(maximum=255, value=128, toolTip="Duty 0-255")
+        pl.setSpacing(2)
+        self.pwm_v_spin = QDoubleSpinBox(suffix=" V", decimals=2, maximum=12.0,
+                                         singleStep=0.1, value=3.3,
+                                         toolTip="High-level amplitude")
+        self.res_spin = QSpinBox(minimum=1, maximum=14, value=8, suffix=" bit",
+                                 toolTip="PWM resolution (LEDC bits)")
+        self.duty_spin = QSpinBox(maximum=255, value=128,
+                                  toolTip="Duty cycle (0 … 2^res - 1)")
+        self.res_spin.valueChanged.connect(self._on_res_changed)
         self.freq_spin = QSpinBox(maximum=150000, minimum=1, value=1000,
                                   suffix=" Hz", toolTip="Frequency")
-        pl.addWidget(self.duty_spin)
-        pl.addWidget(self.freq_spin)
-        self.params.addWidget(pwm_row)
+        pl.addWidget(self.pwm_v_spin, 0, 0)
+        pl.addWidget(self.duty_spin, 0, 1)
+        pl.addWidget(self.freq_spin, 1, 0)
+        pl.addWidget(self.res_spin, 1, 1)
+        self.params.addWidget(pwm_page)
 
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
 
@@ -150,6 +160,11 @@ class LvlpCard(_CardBase):
     def _on_mode_changed(self, mode: str) -> None:
         self.params.setCurrentIndex(self.MODES.index(mode))
 
+    def _on_res_changed(self, bits: int) -> None:
+        max_duty = (1 << bits) - 1
+        self.duty_spin.setMaximum(max_duty)
+        self.duty_spin.setToolTip(f"Duty cycle (0 … {max_duty})")
+
     def _apply(self) -> None:
         mode = self.mode_combo.currentText()
         params: Dict[str, object] = {}
@@ -160,8 +175,10 @@ class LvlpCard(_CardBase):
         elif mode == "RL":
             params["i"] = self.i_spin_rl.value()
         elif mode == "PWM":
+            params["v"] = self.pwm_v_spin.value()
             params["duty"] = self.duty_spin.value()
             params["freq"] = self.freq_spin.value()
+            params["res"] = self.res_spin.value()
         self._apply_fn(self.ch, mode, params)
 
     def update_from(self, d: dict) -> None:
@@ -169,7 +186,8 @@ class LvlpCard(_CardBase):
         mode = d.get("mode", "?")
         extra = ""
         if mode == "PWM":
-            extra = f"  {d.get('duty', 0)}/{d.get('freq', 0)}Hz"
+            extra = (f"  {d.get('duty', 0)}/{(1 << d.get('res', 8)) - 1}"
+                     f" @ {d.get('freq', 0)}Hz")
         self._set_status(st, conn, f"{mode}{extra}")
         v, i = d.get("v", 0.0), d.get("i", 0.0)
         self.live_label.setText(f"{v:7.3f} V   {i * 1000:8.1f} mA")

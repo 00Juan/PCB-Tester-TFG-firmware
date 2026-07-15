@@ -8,7 +8,8 @@ Commands:
     hello                     device identity
     vs <ch> <volts>           voltage source
     cs <ch> <amps>            current source
-    pwm <ch> <duty> <freq>    PWM generator (CH1-4)
+    pwm <ch> <duty> <freq> [v] [res]   PWM generator (CH1-4); v = amplitude
+                              in volts, res = resolution in bits (1-14)
     hz <ch>                   high impedance
     on <ch> | off <ch>        HP/HV relay (ch 9-11)
     limits <ch> <vmax> [imax]
@@ -111,7 +112,9 @@ def _run(client: PCBTesterClient, mock, line: str) -> bool:
     elif cmd == "cs":
         client.set_channel(int(args[0]), "CS", i=float(args[1]))
     elif cmd == "pwm":
-        client.set_channel(int(args[0]), "PWM", duty=int(args[1]), freq=int(args[2]))
+        client.set_channel(int(args[0]), "PWM", duty=int(args[1]), freq=int(args[2]),
+                           v=float(args[3]) if len(args) > 3 else None,
+                           res=int(args[4]) if len(args) > 4 else None)
     elif cmd == "hz":
         client.set_channel(int(args[0]), "HZ")
     elif cmd == "on":
