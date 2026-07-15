@@ -59,6 +59,7 @@ void HPCH::update() {
 void HPCH::connect() {
     if (channelStatus == HPCH_STATUS_NORMAL) {
         sr->set(srPin, HIGH); // HIGH turns ON the PMOS switch
+        connected = true;
         if (led) {
             *led = CRGB::Green;
             FastLED.show();
@@ -68,6 +69,7 @@ void HPCH::connect() {
 
 void HPCH::disconnect() {
     sr->set(srPin, LOW); // LOW turns OFF the PMOS switch
+    connected = false;
 }
 
 // ============================================================================

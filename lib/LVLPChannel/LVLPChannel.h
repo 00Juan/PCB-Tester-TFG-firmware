@@ -56,6 +56,9 @@ private:
     LVLPStatus channelStatus;
     float maxVoltageLimit;
     float maxCurrentLimit;
+    bool connected = false;      // SSR state, tracked by connect()/disconnect()
+    uint16_t pwmDuty = 0;        // last values accepted by setPwm()
+    uint32_t pwmFreq = 0;
     void checkLimits();
     
     float userTargetVoltage;
@@ -127,8 +130,22 @@ public:
 
     uint16_t dacValueAttribute=0;
     float dacVoltageAttribute=0;
-    
+
     LVLPMode getMode() const { return channelMode; }
+
+    // State snapshot getters (values cached by update() — no bus traffic)
+    uint8_t  getIndex() const { return channelIndex; }
+    float    getTargetVoltage() const { return userTargetVoltage; }
+    float    getTargetCurrent() const { return targetCurrent; }
+    float    getLastVoltage() const { return channelVoltageOut; }
+    float    getLastCurrent() const { return channelCurrentOut; }
+    float    getMaxVoltageLimit() const { return maxVoltageLimit; }
+    float    getMaxCurrentLimit() const { return maxCurrentLimit; }
+    bool     isConnected() const { return connected; }
+    bool     hasPwm() const { return pwmPin >= 0; }
+    uint16_t getPwmDuty() const { return pwmDuty; }
+    uint32_t getPwmFreq() const { return pwmFreq; }
+    const ChannelCalibrationData& getCalibrationData() const { return calData; }
 };
 
 #endif

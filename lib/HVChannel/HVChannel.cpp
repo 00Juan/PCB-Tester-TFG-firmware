@@ -48,6 +48,7 @@ void HVChannel::update() {
 void HVChannel::connect() {
     if (channelStatus == HV_STATUS_NORMAL) {
         sr->set(srPin, HIGH);
+        connected = true;
         if (led) {
             *led = CRGB::Green;
             FastLED.show();
@@ -57,6 +58,7 @@ void HVChannel::connect() {
 
 void HVChannel::disconnect() {
     sr->set(srPin, LOW);
+    connected = false;
 }
 
 // ============================================================================

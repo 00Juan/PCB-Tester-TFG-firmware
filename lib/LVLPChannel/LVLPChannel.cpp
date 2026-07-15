@@ -183,11 +183,15 @@ bool LVLPChannel::setMode(LVLPMode mode) {
   return true;
 }
 
-void LVLPChannel::disconnect() { sr->set(srPin, LOW); }
+void LVLPChannel::disconnect() {
+  sr->set(srPin, LOW);
+  connected = false;
+}
 
 void LVLPChannel::connect() {
   if (channelStatus == STATUS_NORMAL) {
     sr->set(srPin, HIGH);
+    connected = true;
   }
 }
 
@@ -236,6 +240,8 @@ bool LVLPChannel::setPwm(uint16_t dutycycle, uint32_t frequency) {
 
   ledcAttachPin(pwmPin, ledcChannel);
   ledcWrite(ledcChannel, dutycycle);
+  pwmDuty = dutycycle;
+  pwmFreq = frequency;
   return true;
 }
 

@@ -44,6 +44,7 @@ private:
     CRGB* led;
 
     HPCHStatus channelStatus;
+    bool connected = false; // PMOS state, tracked by connect()/disconnect()
 
     float maxVoltageLimit;
     float maxCurrentLimit;
@@ -186,6 +187,15 @@ public:
     float readVIn();
     float readVOut();
     float readCurrent();
+
+    // State snapshot getters (values cached by update() — no bus traffic)
+    uint8_t getIndex() const { return channelIndex; }
+    float   getLastVIn() const { return channelVIn; }
+    float   getLastVOut() const { return channelVOut; }
+    float   getLastCurrent() const { return channelCurrentOut; }
+    float   getMaxVoltageLimit() const { return maxVoltageLimit; }
+    float   getMaxCurrentLimit() const { return maxCurrentLimit; }
+    bool    isConnected() const { return connected; }
 
     // -----------------------------------------------------------------------
     // Debug

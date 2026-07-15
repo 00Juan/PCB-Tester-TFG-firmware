@@ -137,6 +137,14 @@ public:
      */
     uint16_t readRaw();
 
+    // State snapshot getters (values cached by update() — no bus traffic)
+    uint8_t getIndex() const { return channelIndex; }
+    float   getLastVoltage() const { return channelVoltage; }
+    float   getMaxVoltageLimit() const { return maxVoltageLimit; }
+    bool    isConnected() const { return connected; }
+    uint8_t getCalPointCount() const { return calData.numPoints; }
+    bool    isCalibrationValid() const { return calData.numPoints >= 2; }
+
     // -----------------------------------------------------------------------
     // Calibration — interactive multi-point PWL
     // -----------------------------------------------------------------------
@@ -222,6 +230,7 @@ private:
     CRGB*    led;
 
     HVChannelStatus channelStatus;
+    bool     connected = false; // relay state, tracked by connect()/disconnect()
     float    maxVoltageLimit;
 
     HVChannelCalibrationData calData;
