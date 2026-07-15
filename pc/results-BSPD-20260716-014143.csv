@@ -1,0 +1,10 @@
+test,name,outcome,measured,expected,ms,detail
+0,BSPD Normal: SDC is 12V,FAIL,-0.029126,12,130,Voltage -0.0291 V (target 12.0000 V) err 12.0291 V > tol 2.0000 V on CH3
+1,BSPD Single Fault HS > 500ms: S,FAIL,-0.029126,12,602,Voltage -0.0291 V (target 12.0000 V) err 12.0291 V > tol 2.0000 V on CH3
+2,BSPD Single Fault BS > 500ms: S,FAIL,-0.029126,12,604,Voltage -0.0291 V (target 12.0000 V) err 12.0291 V > tol 2.0000 V on CH3
+3,BSPD Double Fault < 500ms: SDC ,FAIL,-0.029126,12,406,Voltage -0.0291 V (target 12.0000 V) err 12.0291 V > tol 2.0000 V on CH3
+4,BSPD Double Fault > 500ms: SDC ,PASS,-0.029126,0,604,Voltage -0.0291 V (target 0.0000 V) err 0.0291 V <= tol 1.0000 V on CH3
+5,BSPD Recovery > 10s: SDC goes t,TIMEOUT,-0.029126,10,15000,Timeout after 15000 ms. Worst sense channel: -0.029 V (threshold: 10.000 V)
+6,BSPD Implausibility HS > 4.5V: ,PASS,-0.029126,0,130,Voltage -0.0291 V (target 0.0000 V) err 0.0291 V <= tol 1.0000 V on CH3
+7,BSPD Implausibility HS < 0.5V: ,PASS,-0.029126,0,130,Voltage -0.0291 V (target 0.0000 V) err 0.0291 V <= tol 1.0000 V on CH3
+8,BSPD Implaus No Auto Rec (>11s),PASS,-0.029126,0,15029,Voltage -0.0291 V (target 0.0000 V) err 0.0291 V <= tol 1.0000 V on CH3

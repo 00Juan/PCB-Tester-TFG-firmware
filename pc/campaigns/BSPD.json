@@ -1,0 +1,158 @@
+{
+  "format": "pcbtester-campaign",
+  "version": 1,
+  "name": "BSPD",
+  "description": "Brake System Plausibility Device — port of test_BSPD.cpp. Wiring: CH1=HS (Hall), CH2=BS (Brake), CH3=SDC_OUT (sense), CH4=SDC_IN (12V). SR bit 8 power-cycles the BSPD supply.",
+  "tests": [
+    {
+      "name": "BSPD Normal: SDC is 12V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 12.0, "tolerance_v": 2.0, "settle_ms": 100}
+    },
+    {
+      "name": "BSPD Single Fault HS > 500ms: SDC 12V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 1, "v": 4.0}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 12.0, "tolerance_v": 2.0, "settle_ms": 580}
+    },
+    {
+      "name": "BSPD Single Fault BS > 500ms: SDC 12V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 2, "v": 4.0}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 12.0, "tolerance_v": 2.0, "settle_ms": 580}
+    },
+    {
+      "name": "BSPD Double Fault < 500ms: SDC 12V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 1, "v": 4.0},
+        {"step": "vs", "ch": 2, "v": 4.0}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 12.0, "tolerance_v": 2.0, "settle_ms": 380}
+    },
+    {
+      "name": "BSPD Double Fault > 500ms: SDC 0V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 1, "v": 4.0},
+        {"step": "vs", "ch": 2, "v": 4.0}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 0.0, "tolerance_v": 1.0, "settle_ms": 580}
+    },
+    {
+      "name": "BSPD Recovery > 10s: SDC goes to 12V",
+      "type": "voltage_threshold",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 1, "v": 4.0},
+        {"step": "vs", "ch": 2, "v": 4.0},
+        {"step": "wait", "ms": 600},
+        {"step": "vs", "ch": 1, "v": 1.0}
+      ],
+      "params": {"drive_mask": 0, "drive_v": 0.0, "sense_mask": 4, "threshold_v": 10.0, "timeout_ms": 15000}
+    },
+    {
+      "name": "BSPD Implausibility HS > 4.5V: SDC 0V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 1, "v": 5.0}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 0.0, "tolerance_v": 1.0, "settle_ms": 100}
+    },
+    {
+      "name": "BSPD Implausibility HS < 0.5V: SDC 0V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 1, "v": 0.0}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 0.0, "tolerance_v": 1.0, "settle_ms": 100}
+    },
+    {
+      "name": "BSPD Implaus No Auto Rec (>11s): SDC 0V",
+      "type": "static_voltage",
+      "setup": [
+        {"step": "vs", "ch": 1, "v": 1.0},
+        {"step": "vs", "ch": 2, "v": 1.0},
+        {"step": "vs", "ch": 4, "v": 12.0},
+        {"step": "wait", "ms": 100},
+        {"step": "sr", "bit": 8, "on": false},
+        {"step": "wait", "ms": 1000},
+        {"step": "sr", "bit": 8, "on": true},
+        {"step": "wait", "ms": 100},
+        {"step": "vs", "ch": 1, "v": 5.0},
+        {"step": "wait", "ms": 200},
+        {"step": "vs", "ch": 1, "v": 1.0}
+      ],
+      "params": {"sense_mask": 4, "expected_v": 0.0, "tolerance_v": 1.0, "settle_ms": 15000}
+    }
+  ]
+}

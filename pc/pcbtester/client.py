@@ -67,6 +67,9 @@ class PCBTesterClient:
         self.on_estop: Optional[CommandCallback] = None
         self.on_log: Optional[CommandCallback] = None
         self.on_capture: Optional[CommandCallback] = None
+        self.on_tb_progress: Optional[CommandCallback] = None
+        self.on_tb_result: Optional[CommandCallback] = None
+        self.on_tb_done: Optional[CommandCallback] = None
         #: Called with raw text for lines that are not JSON (boot prints etc.)
         self.on_raw: Optional[Callable[[str], None]] = None
 
@@ -192,6 +195,44 @@ class PCBTesterClient:
                 return ev
 
     # ------------------------------------------------------------------ #
+    # Testbench
+    # ------------------------------------------------------------------ #
+
+    def tb_clear(self, **kw: Any) -> Dict[str, Any]:
+        return self.command("tb.clear", **kw)
+
+    def tb_add(self, test: Dict[str, Any], **kw: Any) -> Dict[str, Any]:
+        """Queue one test: {"name","type","setup":[…],"params":{…}}."""
+        return self.command("tb.add", test=test, **kw)
+
+    def tb_list(self, **kw: Any) -> Dict[str, Any]:
+        return self.command("tb.list", **kw)
+
+    def tb_run(self, **kw: Any) -> Dict[str, Any]:
+        """Start the loaded campaign. Returns the 'started' ack immediately;
+        watch tb_progress / tb_result events and the final tb_done."""
+        return self.command("tb.run", **kw)
+
+    def tb_abort(self, **kw: Any) -> Dict[str, Any]:
+        return self.command("tb.abort", **kw)
+
+    def tb_status(self, **kw: Any) -> Dict[str, Any]:
+        return self.command("tb.status", **kw)
+
+    def load_campaign(self, tests: list, timeout: float = 5.0,
+                      **kw: Any) -> int:
+        """tb.clear + tb.add for each test. Returns the loaded count.
+
+        Uses a longer per-command timeout than the default: tb.add lines are
+        long and the device may be mid-OLED-redraw when they arrive.
+        """
+        self.tb_clear(timeout=timeout, **kw)
+        count = 0
+        for t in tests:
+            count = self.tb_add(t, timeout=timeout, **kw).get("count", count + 1)
+        return count
+
+    # ------------------------------------------------------------------ #
     # Calibration
     # ------------------------------------------------------------------ #
 
@@ -264,13 +305,21 @@ class PCBTesterClient:
             if not isinstance(msg, dict):
                 continue
 
-            if msg.get("type") == "ack" and "id" in msg:
-                with self._pending_lock:
-                    pending = self._pending.get(msg["id"])
-                if pending is not None:
-                    pending.response = msg
-                    pending.event.set()
-                    continue
+            if msg.get("type") == "ack":
+                if "id" in msg:
+                    with self._pending_lock:
+                        pending = self._pending.get(msg["id"])
+                    if pending is not None:
+                        pending.response = msg
+                        pending.event.set()
+                        continue
+                # Uncorrelated ack (no id / unknown id) — typically the device
+                # answering E_PARSE to a corrupted line. Surface it as a log
+                # event so the UI shows what actually happened instead of a
+                # silent timeout.
+                msg = {"type": "log", "lvl": "warn",
+                       "msg": f"uncorrelated device ack: "
+                              f"{msg.get('err', 'ok')} {msg.get('msg', '')}"}
             self._dispatch_event(msg)
 
     def _dispatch_event(self, msg: Dict[str, Any]) -> None:
@@ -292,6 +341,9 @@ class PCBTesterClient:
             "estop": self.on_estop,
             "log": self.on_log,
             "capture": self.on_capture,
+            "tb_progress": self.on_tb_progress,
+            "tb_result": self.on_tb_result,
+            "tb_done": self.on_tb_done,
         }.get(msg.get("type"))
         if callback:
             try:

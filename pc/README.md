@@ -32,6 +32,14 @@ What's on screen:
   immediately; a red banner shows until you *Clear E-stop*.
 - **Fault banner** — overcurrent/overvoltage events pop a banner and turn the
   offending card red/blue until reset.
+- **Testbench tab** — build test campaigns (schema-driven forms for all 11
+  test types + raw JSON view, DUT setup steps incl. power-cycling via
+  shift-register bits), save/load them as JSON under `pc/campaigns/`
+  (`BSPD.json` ships as the reference), run them with a live progress bar,
+  abort mid-run, and watch the color-coded results table fill in as each
+  test finishes. Results export to CSV/JSON. While a campaign runs the
+  device only serves E-stop/abort/status (everything else answers
+  `E_BUSY`) and telemetry pauses.
 - **Trends tab** — rolling live plots (10–300 s window) fed by telemetry:
   LVLP CH1–8 voltage or current, plus HP/HV voltages; per-channel visibility
   toggles and pause.
@@ -112,6 +120,8 @@ Channel numbering everywhere: **1–8 = LVLP**, **9–10 = HP**, **11 = HV**.
 | `rate <hz>` | `rate 5` | Telemetry rate 0–50 Hz (0 = off) |
 | `cap <ch> [n] [dt_ms]` | `cap 1 256 2` | Voltage burst capture, prints min/max/pk-pk |
 | `cal <ch>` | `cal 11` | Print the channel's calibration data |
+| `tb <file.json>` | `tb campaigns/BSPD.json` | Load + run a campaign file, print streamed results |
+| `tbstop` | `tbstop` | Abort the running campaign |
 | `estop` | `estop` | Emergency stop: everything opens immediately |
 | `telem` | `telem` | Print the next telemetry frame |
 | `watch` | `watch` | Stream telemetry until you press Enter |
@@ -147,7 +157,26 @@ serial monitor. One JSON object per line; every command carries a client-chosen
 {"id":15,"cmd":"cal.set","ch":1,"cal":{"offset":0.21}}  // merge into RAM
 {"id":16,"cmd":"cal.save"}                              // persist ALL channels to NVS flash
 {"id":17,"cmd":"cal.load"}                              // reload ALL channels from NVS
+{"id":18,"cmd":"tb.clear"}                              // empty the test queue
+{"id":19,"cmd":"tb.add","test":{"name":"normal_op","type":"static_voltage",
+   "setup":[{"step":"vs","ch":1,"v":1.0},{"step":"sr","bit":8,"on":false},
+            {"step":"wait","ms":1000},{"step":"sr","bit":8,"on":true}],
+   "params":{"sense_mask":4,"expected_v":12.0,"tolerance_v":1.0,"settle_ms":200}}}
+{"id":20,"cmd":"tb.list"}                               // ack: tests[{name,type},…]
+{"id":21,"cmd":"tb.run"}                                // ack "started", then events, then tb_done
+{"id":22,"cmd":"tb.abort"}
+{"id":23,"cmd":"tb.status"}                             // running?, current test, elapsed
 ```
+
+Testbench test objects: `type` is one of `static_voltage, voltage_accuracy,
+voltage_threshold, voltage_ripple, current_consumption, current_inrush,
+power_sequence, pwm_integrity, short_circuit, load_regulation,
+cross_isolation`; `setup` is an optional list of DUT-setup steps
+(`vs/cs/hz/pwm/wait/sr`, ≤12) executed before the test; `params` fields are
+per-type (masks are LVLP bitmasks, bit 0 = CH1 — see the GUI's JSON view or
+`campaigns/BSPD.json` for examples). Campaigns are loaded one test per
+`tb.add`. During a run only `hello`/`estop`/`tb.abort`/`tb.status` are served
+(the rest get `E_BUSY`) and telemetry pauses; `estop` also aborts the run.
 
 Calibration `cal` shapes — LVLP: `K1,K2,offset,mADC,bADC,mDAC,bDAC`;
 HP: `mADC_VIn,bADC_VIn,mADC_VOut,bADC_VOut,sens,vref,zero_adc`;
@@ -181,6 +210,9 @@ Unsolicited events (no `id`), pushed by the device:
 {"type":"estop","src":"cmd"}        // src: "cmd" | "button"
 {"type":"log","lvl":"info","msg":"PCB Tester app ready"}
 {"type":"capture","kind":"scope","ch":1,"dt_ms":2,"unit":"V","samples":[3.301,3.298, ...]}
+{"type":"tb_progress","test":2,"of":9,"name":"BSPD Double Fault > 500ms: SDC 0V","elapsed_ms":1520}
+{"type":"tb_result","test":2,"name":"…","outcome":"PASS","measured":0.02,"expected":0.0,"ms":1802,"detail":"…"}
+{"type":"tb_done","total":9,"pass":8,"fail":1,"aborted":false}
 ```
 
 `st` status codes: 0 = normal, 1 = overcurrent, 2 = overvoltage, 3 = other
@@ -200,6 +232,8 @@ Unsolicited events (no `id`), pushed by the device:
 | `client.set_telemetry_rate(hz)` | `telem.rate` |
 | `client.estop()` / `client.clear_estop()` | `estop` / `estop.clear` |
 | `client.capture(ch, n=128, dt_ms=2)` | `ch.capture` (returns the capture event) |
+| `client.load_campaign(tests)` / `client.tb_run()` / `client.tb_abort()` | `tb.clear`+`tb.add`×N / `tb.run` / `tb.abort` |
+| `client.tb_list()` / `client.tb_status()` | `tb.list` / `tb.status` |
 | `client.get_calibration(ch)` / `client.set_calibration(ch, cal)` | `cal.get` / `cal.set` |
 | `client.save_calibration()` / `client.load_calibration()` | `cal.save` / `cal.load` |
 | `client.command(cmd, **params)` | anything (escape hatch) |

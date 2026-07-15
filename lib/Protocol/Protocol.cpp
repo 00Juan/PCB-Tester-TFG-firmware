@@ -59,6 +59,31 @@ static const char* hvFaultStr(HVChannelStatus s) {
 // Lifecycle
 // ============================================================================
 
+TesterProtocol* TesterProtocol::instance_ = nullptr;
+
+void TesterProtocol::setTestRunner(DUTTestRunner* runner) {
+    runner_ = runner;
+    instance_ = this;
+    if (runner_) {
+        runner_->setCommsHook(&TesterProtocol::tbCommsHookThunk);
+        runner_->setProgressCallback(&TesterProtocol::tbProgressThunk);
+        runner_->setResultCallback(&TesterProtocol::tbResultThunk);
+    }
+}
+
+void TesterProtocol::tbCommsHookThunk() {
+    if (instance_) instance_->service();
+}
+
+void TesterProtocol::tbProgressThunk(uint8_t idx, uint8_t total,
+                                     const char* name, uint32_t elapsedMs) {
+    if (instance_) instance_->emitTbProgress(idx, total, name, elapsedMs);
+}
+
+void TesterProtocol::tbResultThunk(uint8_t idx, const TestResult& r) {
+    if (instance_) instance_->emitTbResult(idx, r);
+}
+
 void TesterProtocol::begin(LVLPChannel* lvlp, uint8_t lvlpCount,
                            HPCH* hp, uint8_t hpCount,
                            HVChannel* hv, uint8_t hvCount,
@@ -149,6 +174,18 @@ void TesterProtocol::handleLine(char* line) {
         return;
     }
 
+    // While a testbench campaign runs (handleLine re-entered via the runner's
+    // comms hook) only safety/status commands are served.
+    if (busy_
+        && strcmp(cmd, "hello") != 0 && strcmp(cmd, "estop") != 0
+        && strcmp(cmd, "tb.abort") != 0 && strcmp(cmd, "tb.status") != 0) {
+        res["ok"] = false;
+        res["err"] = "E_BUSY";
+        res["msg"] = "testbench running";
+        sendDoc(io_, res);
+        return;
+    }
+
     // ---- hello -------------------------------------------------------------
     if (strcmp(cmd, "hello") == 0) {
         res["ok"] = true;
@@ -198,6 +235,12 @@ void TesterProtocol::handleLine(char* line) {
         res["ok"] = true;
         res["telem_hz"] = telemHz_;
         sendDoc(io_, res);
+        return;
+    }
+
+    // ---- tb.* (testbench) ------------------------------------------------------
+    if (strncmp(cmd, "tb.", 3) == 0) {
+        handleTb(id, cmd, doc);
         return;
     }
 
@@ -704,6 +747,7 @@ void TesterProtocol::handleCalLoad(long id) {
 // ============================================================================
 
 void TesterProtocol::triggerEstop(const char* source) {
+    if (runner_) runner_->requestAbort(); // stop any running campaign first
     // MODE_HIGH_IMPEDANCE is always accepted by setMode(), even when faulted.
     for (uint8_t i = 0; i < nLvlp_; i++) {
         lvlp_[i].setMode(MODE_HIGH_IMPEDANCE);

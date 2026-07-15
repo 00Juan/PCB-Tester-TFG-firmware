@@ -18,9 +18,12 @@
 #include "hardwareIOSetup.h"
 #include "Protocol.h"
 #include "CalibrationStore.h"
+#include "DUTTestbench.h"
 
 static TesterProtocol proto;
 static CalibrationStore calStore;
+static DUTTestRunner testRunner;
+static LVLPChannel* lvlpPtrs[8];
 
 static constexpr uint32_t UPDATE_PERIOD_MS = 50; // channel update pass (20 Hz)
 static constexpr uint32_t OLED_PERIOD_MS = 250;
@@ -84,6 +87,15 @@ static void drawStatusScreen() {
 // ============================================================================
 
 void setup() {
+  // The default CDC buffers are 256 B. Long protocol lines (tb.add tests are
+  // ~900 B) arrive while loop() is stalled in the OLED redraw and overflow
+  // the RX buffer -> corrupted line -> E_PARSE without id -> client timeout.
+  // Size both directions generously before begin().
+  Serial.setRxBufferSize(4096);
+#if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE && \
+    defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+  Serial.setTxBufferSize(4096);
+#endif
   Serial.begin(115200);
 #if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE && \
     defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
@@ -134,8 +146,14 @@ void setup() {
     if (calStore.loadHV(0, vd)) { hvChannels[0].setCalibrationData(vd); calLoaded++; }
   }
 
+  for (uint8_t i = 0; i < 8; i++) lvlpPtrs[i] = &lvlpChannels[i];
+  testRunner.begin(lvlpPtrs, 8);
+  testRunner.bindShiftRegister(&sr);
+  testRunner.setDisplay(&u8g2);
+
   proto.begin(lvlpChannels, 8, hpChannels, 2, hvChannels, 1, Serial);
   proto.setCalibrationStore(&calStore);
+  proto.setTestRunner(&testRunner);
   Serial.printf("{\"type\":\"log\",\"lvl\":\"info\",\"msg\":\"PCB Tester app ready, cal from NVS: %u/11 channels\"}\n",
                 calLoaded);
 

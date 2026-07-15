@@ -17,6 +17,8 @@ Commands:
     rate <hz>                 telemetry rate (0 = off)
     cap <ch> [n] [dt_ms]      voltage burst capture (prints stats)
     cal <ch>                  print channel calibration
+    tb <file.json>            load a campaign file, run it, print results
+    tbstop                    abort the running campaign
     estop
     telem                     print the next telemetry frame
     watch                     stream telemetry until Enter
@@ -139,6 +141,26 @@ def _run(client: PCBTesterClient, mock, line: str) -> bool:
               f"{ev['unit']}")
     elif cmd == "cal":
         print(json.dumps(client.get_calibration(int(args[0])), indent=2))
+    elif cmd == "tb":
+        with open(args[0]) as f:
+            data = json.load(f)
+        tests = data["tests"] if isinstance(data, dict) else data
+        n = client.load_campaign(tests)
+        client.drain_events()
+        client.tb_run()
+        print(f"running {n} tests… (tbstop to abort)")
+        while True:
+            ev = client.next_event(timeout=300.0)
+            if ev.get("type") == "tb_result":
+                print(f'  [{ev.get("outcome"):7s}] {ev.get("name")}  '
+                      f'({ev.get("measured")} / {ev.get("expected")})  '
+                      f'{ev.get("ms")} ms  {ev.get("detail")}')
+            elif ev.get("type") == "tb_done":
+                print(f'done: {ev.get("pass")} passed, {ev.get("fail")} failed'
+                      + (" (ABORTED)" if ev.get("aborted") else ""))
+                break
+    elif cmd == "tbstop":
+        client.tb_abort()
     elif cmd == "estop":
         client.estop()
         print("E-STOP sent")

@@ -273,13 +273,45 @@ struct StaticVoltageParams {
 typedef void (*DUTSetupFn)(void);
 
 // ============================================================================
+// DATA-DRIVEN DUT SETUP STEPS (runtime alternative to DUTSetupFn)
+// ============================================================================
+
+/**
+ * Sequence of primitive actions executed before a test, in order, after the
+ * optional dutSetup callback. Expressive enough for the BSPD scenarios:
+ * drive channels, wait, and toggle a shift-register bit (DUT power-cycle).
+ */
+enum SetupStepKind : uint8_t {
+    STEP_VS,     ///< ch (1-8) -> voltage source at `value` volts
+    STEP_CS,     ///< ch (1-8) -> current source at `value` amps
+    STEP_HZ,     ///< ch (1-8) -> high impedance
+    STEP_PWM,    ///< ch (1-4) -> PWM: duty, `ms` = frequency Hz, `value` = amplitude V
+    STEP_WAIT,   ///< wait `ms` milliseconds (abortable)
+    STEP_SR_BIT, ///< shift-register bit `ch` -> `value` != 0 ? HIGH : LOW
+};
+
+struct SetupStep {
+    SetupStepKind kind;
+    uint8_t  ch;     ///< LVLP channel 1-8, or SR bit 0-15 for STEP_SR_BIT
+    float    value;  ///< volts / amps / SR level (0 or 1)
+    uint32_t ms;     ///< STEP_WAIT duration, or STEP_PWM frequency (Hz)
+    uint16_t duty;   ///< STEP_PWM duty cycle
+};
+
+static constexpr uint8_t DUT_MAX_SETUP_STEPS = 12;
+static constexpr uint8_t DUT_TEST_NAME_LEN   = 32;
+
+// ============================================================================
 // UNIFIED TEST CASE
 // ============================================================================
 
 struct TestCase {
-    const char* name;     ///< Human-readable label (must point to a static string)
-    TestType    type;
-    DUTSetupFn  dutSetup; ///< Called before the test after safetyDisconnectAll; nullptr = none
+    const char* name = nullptr;       ///< Display name; addTest() copies it into nameBuf
+    char nameBuf[DUT_TEST_NAME_LEN] = {0}; ///< Persistent storage for runtime names
+    TestType    type = TEST_STATIC_VOLTAGE;
+    DUTSetupFn  dutSetup = nullptr;   ///< Legacy callback; runs before setup[] steps
+    uint8_t     setupCount = 0;       ///< Number of valid entries in setup[]
+    SetupStep   setup[DUT_MAX_SETUP_STEPS] = {};
     union {
         VoltageThresholdParams       voltageThreshold;
         VoltageAccuracyParams        voltageAccuracy;
@@ -298,6 +330,14 @@ struct TestCase {
 // ============================================================================
 // TEST RUNNER
 // ============================================================================
+
+/// Serviced during waits so serial commands (abort/E-stop) stay responsive.
+typedef void (*DUTCommsHook)(void);
+/// Emitted ~2 Hz while a test runs, and once at each test start.
+typedef void (*DUTProgressFn)(uint8_t idx, uint8_t total, const char* name,
+                              uint32_t elapsedMs);
+/// Emitted as each test finishes.
+typedef void (*DUTResultFn)(uint8_t idx, const TestResult& r);
 
 class DUTTestRunner {
 public:
@@ -325,6 +365,31 @@ public:
      * @brief Set the OLED display for real-time updates.
      */
     void setDisplay(U8G2* display) { display_ = display; }
+
+    // -------------------------------------------------------------------------
+    // Streaming / abort (GUI integration)
+    // -------------------------------------------------------------------------
+
+    /// Bind the shift register used by STEP_SR_BIT setup steps.
+    void bindShiftRegister(ShiftRegister74HC595<2>* sr) { sr_ = sr; }
+
+    void setCommsHook(DUTCommsHook hook) { commsHook_ = hook; }
+    void setProgressCallback(DUTProgressFn cb) { progressCb_ = cb; }
+    void setResultCallback(DUTResultFn cb) { resultCb_ = cb; }
+
+    /// Request abort; honored at the next wait/poll point. The current test
+    /// reports OUTCOME_ERROR "aborted" and the campaign stops safely.
+    void requestAbort() { abortRequested_ = true; }
+    bool isRunning() const { return running_; }
+    bool wasAborted() const { return aborted_; }
+    uint8_t currentIndex() const { return curIdx_; }
+    const char* currentName() const {
+        return (curIdx_ < testCount_) ? tests_[curIdx_].name : "";
+    }
+    uint32_t currentElapsedMs() const {
+        return running_ ? (uint32_t)(millis() - curT0_) : 0;
+    }
+    const TestCase& getTest(uint8_t i) const { return tests_[i]; }
 
     /**
      * @brief Run all queued tests sequentially (blocking).
@@ -379,6 +444,19 @@ private:
     uint8_t    testCount_;
 
     U8G2* display_ = nullptr;
+    ShiftRegister74HC595<2>* sr_ = nullptr;
+
+    // Streaming / abort state
+    DUTCommsHook  commsHook_ = nullptr;
+    DUTProgressFn progressCb_ = nullptr;
+    DUTResultFn   resultCb_ = nullptr;
+    volatile bool abortRequested_ = false;
+    bool running_ = false;
+    bool aborted_ = false;
+    uint8_t  curIdx_ = 0;
+    uint8_t  curTotal_ = 0;
+    uint32_t curT0_ = 0;
+    uint32_t lastProgressMs_ = 0;
 
     // -------------------------------------------------------------------------
     // Per-type runners (called by runOne)
@@ -413,6 +491,18 @@ private:
 
     /// Blocking wait that updates the OLED display while waiting
     void waitAndDisplay(uint32_t waitMs, const char* testName);
+
+    /// Abortable wait: <=10 ms chunks, services comms hook + progress callback.
+    void interruptibleDelay(uint32_t ms);
+
+    /// Service comms + throttled progress; returns true if abort was requested.
+    bool serviceAndCheckAbort();
+
+    /// Apply a TestCase's data-driven setup[] steps (after dutSetup).
+    void applySetupSteps(const TestCase& tc);
+
+    /// Fill a result with OUTCOME_ERROR "aborted".
+    void fillAbortedResult(TestResult& r, const char* name);
 
     /// Samples the average current of a single channel (numSamples averaged)
     float sampleAverageCurrent(uint8_t chIdx, uint8_t numSamples);

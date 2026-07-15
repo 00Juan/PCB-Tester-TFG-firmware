@@ -6,6 +6,7 @@
 #include "LVLPChannel.h"
 #include "HPCH.h"
 #include "HVChannel.h"
+#include "DUTTestbench.h"
 
 // ============================================================================
 // TesterProtocol — NDJSON serial protocol for the PC GUI
@@ -45,7 +46,7 @@ class CalibrationStore;
 
 class TesterProtocol {
 public:
-    static constexpr const char* FW_VERSION = "0.2.0";
+    static constexpr const char* FW_VERSION = "0.3.0";
     static constexpr uint8_t PROTO_VERSION = 1;
     static constexpr uint16_t CAPTURE_MAX_SAMPLES = 512;
 
@@ -56,6 +57,14 @@ public:
 
     /// Optional: enables cal.save / cal.load (NVS persistence).
     void setCalibrationStore(CalibrationStore* store) { calStore_ = store; }
+
+    /// Optional: enables tb.* testbench commands. Wires the runner's comms
+    /// hook and progress/result callbacks to this protocol instance.
+    void setTestRunner(DUTTestRunner* runner);
+
+    /// True while a testbench campaign runs (only estop / tb.abort /
+    /// tb.status / hello are served; everything else gets E_BUSY).
+    bool isBusy() const { return busy_; }
 
     /// Drain the serial RX buffer; dispatch any complete command lines.
     void service();
@@ -82,7 +91,7 @@ public:
     void log(const char* level, const char* msg);
 
 private:
-    static constexpr size_t RX_BUF_SIZE = 768;
+    static constexpr size_t RX_BUF_SIZE = 2048; // one tb.add test object per line
 
     LVLPChannel* lvlp_ = nullptr;
     HPCH*        hp_   = nullptr;
@@ -105,6 +114,8 @@ private:
     uint8_t prevHvStatus_[1] = {0};
 
     CalibrationStore* calStore_ = nullptr;
+    DUTTestRunner* runner_ = nullptr;
+    bool busy_ = false;
 
     void handleLine(char* line);
     void handleCapture(long id, uint8_t ch, uint16_t n, uint16_t dtMs);
@@ -112,6 +123,21 @@ private:
     void handleCalSet(long id, uint8_t ch, JsonObjectConst cal);
     void handleCalSave(long id);
     void handleCalLoad(long id);
+
+    // Testbench (ProtocolTb.cpp)
+    void handleTb(long id, const char* cmd, JsonDocument& doc);
+    void emitTbProgress(uint8_t idx, uint8_t total, const char* name,
+                        uint32_t elapsedMs);
+    void emitTbResult(uint8_t idx, const TestResult& r);
+    static bool decodeTestCase(JsonObjectConst t, TestCase& out,
+                               char* errBuf, size_t errLen);
+
+    // Static thunks for the runner's C-style callbacks
+    static TesterProtocol* instance_;
+    static void tbCommsHookThunk();
+    static void tbProgressThunk(uint8_t idx, uint8_t total, const char* name,
+                                uint32_t elapsedMs);
+    static void tbResultThunk(uint8_t idx, const TestResult& r);
 };
 
 #endif // TESTER_PROTOCOL_H

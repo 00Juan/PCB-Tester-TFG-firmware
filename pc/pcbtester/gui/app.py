@@ -43,19 +43,38 @@ def main(argv=None) -> int:
             win.scope_tab.dt_spin.setValue(1)
             win.scope_tab._capture()
 
+        def run_campaign() -> None:
+            win._mock.wire(1, 3)
+            win.tb_tab.tests = [
+                {"name": "st-accuracy", "type": "voltage_accuracy",
+                 "params": {"mask": 1, "target_v": 3.0, "tolerance_v": 0.1,
+                            "settle_ms": 50, "samples": 4}},
+                {"name": "st-wired-sense", "type": "static_voltage",
+                 "setup": [{"step": "vs", "ch": 1, "v": 2.5}],
+                 "params": {"sense_mask": 4, "expected_v": 2.5,
+                            "tolerance_v": 0.2, "settle_ms": 50}},
+            ]
+            win.tb_tab._refresh_list()
+            win.tb_tab._run()
+
         def check() -> None:
             x = win.scope_tab.curve.xData  # numpy array or None
             scope_pts = 0 if x is None else len(x)
+            tb_rows = win.tb_tab.results.rowCount()
+            tb_done = win.tb_tab._done_summary or {}
             ok = (win.client is not None and win.telem_count >= 3
-                  and win.trends_tab.sample_count >= 3 and scope_pts == 32)
+                  and win.trends_tab.sample_count >= 3 and scope_pts == 32
+                  and tb_rows == 2 and tb_done.get("pass") == 2)
             print("SELFTEST OK" if ok else
                   f"SELFTEST FAIL (client={win.client is not None}, "
                   f"telem_count={win.telem_count}, "
-                  f"trends={win.trends_tab.sample_count}, scope={scope_pts})")
+                  f"trends={win.trends_tab.sample_count}, scope={scope_pts}, "
+                  f"tb_rows={tb_rows}, tb_done={tb_done})")
             app.exit(0 if ok else 1)
 
         QTimer.singleShot(500, request_scope)
-        QTimer.singleShot(1800, check)
+        QTimer.singleShot(900, run_campaign)
+        QTimer.singleShot(3200, check)
     elif args.mock:
         win.mock_check.setChecked(True)
         win._connect(mock=True)

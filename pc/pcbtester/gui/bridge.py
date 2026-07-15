@@ -18,7 +18,10 @@ class ClientBridge(QObject):
     fault = Signal(object)      # dict
     estop = Signal(object)      # dict
     log = Signal(object)        # dict
-    capture = Signal(object)    # dict
+    capture = Signal(object)      # dict
+    tb_progress = Signal(object)  # dict
+    tb_result = Signal(object)    # dict
+    tb_done = Signal(object)      # dict
 
     def attach(self, client: PCBTesterClient) -> None:
         client.on_telemetry = self.telemetry.emit
@@ -26,6 +29,9 @@ class ClientBridge(QObject):
         client.on_estop = self.estop.emit
         client.on_log = self.log.emit
         client.on_capture = self.capture.emit
+        client.on_tb_progress = self.tb_progress.emit
+        client.on_tb_result = self.tb_result.emit
+        client.on_tb_done = self.tb_done.emit
 
     def detach(self, client: PCBTesterClient) -> None:
         client.on_telemetry = None
@@ -33,3 +39,6 @@ class ClientBridge(QObject):
         client.on_estop = None
         client.on_log = None
         client.on_capture = None
+        client.on_tb_progress = None
+        client.on_tb_result = None
+        client.on_tb_done = None

@@ -304,6 +304,102 @@ def test_cal_backup_restore_all_channels(client):
 
 
 # --------------------------------------------------------------------------- #
+# Testbench
+# --------------------------------------------------------------------------- #
+
+def _quick_campaign():
+    return [
+        {"name": "drive & check CH1->CH3", "type": "voltage_accuracy",
+         "params": {"mask": 1, "target_v": 3.0, "tolerance_v": 0.1,
+                    "settle_ms": 50, "samples": 4}},
+        {"name": "sense CH3 (wired to CH1)", "type": "static_voltage",
+         "setup": [{"step": "vs", "ch": 1, "v": 2.5}],
+         "params": {"sense_mask": 4, "expected_v": 2.5, "tolerance_v": 0.2,
+                    "settle_ms": 50}},
+    ]
+
+
+def _run_campaign(client, tests, timeout=10.0):
+    client.load_campaign(tests)
+    client.drain_events()
+    client.tb_run()
+    results = []
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        ev = client.next_event(timeout=deadline - time.monotonic())
+        if ev.get("type") == "tb_result":
+            results.append(ev)
+        elif ev.get("type") == "tb_done":
+            return results, ev
+    pytest.fail("no tb_done received")
+
+
+def test_tb_add_validates(client):
+    with pytest.raises(CommandError) as e:
+        client.tb_add({"name": "x", "type": "not_a_type"})
+    assert e.value.err == "E_ARG"
+    with pytest.raises(CommandError) as e:
+        client.tb_add({"type": "static_voltage"})  # missing name
+    assert e.value.err == "E_ARG"
+    with pytest.raises(CommandError) as e:
+        client.tb_add({"name": "x", "type": "static_voltage",
+                       "setup": [{"step": "teleport"}]})
+    assert e.value.err == "E_ARG"
+
+
+def test_tb_list(client):
+    client.load_campaign(_quick_campaign())
+    ack = client.tb_list()
+    assert [t["name"] for t in ack["tests"]] == [
+        "drive & check CH1->CH3", "sense CH3 (wired to CH1)"]
+
+
+def test_tb_run_streams_results(client, mock):
+    mock.wire(1, 3)  # CH3 reads back CH1, like a physical loom
+    results, done = _run_campaign(client, _quick_campaign())
+    assert [r["test"] for r in results] == [0, 1]
+    assert all(r["outcome"] == "PASS" for r in results), results
+    assert done["pass"] == 2 and done["fail"] == 0 and not done["aborted"]
+
+
+def test_tb_fails_without_wiring(client):
+    # CH3 floats at ~0 V, so expecting 2.5 V must FAIL
+    results, done = _run_campaign(client, [_quick_campaign()[1]])
+    assert results[0]["outcome"] == "FAIL"
+    assert done["fail"] == 1
+
+
+def test_tb_busy_guard_and_abort(client, mock):
+    mock.tb_time_scale = 1.0
+    slow = [{"name": "slow", "type": "static_voltage",
+             "setup": [{"step": "wait", "ms": 5000}],
+             "params": {"sense_mask": 1, "expected_v": 0.0,
+                        "tolerance_v": 1.0, "settle_ms": 1000}}]
+    client.load_campaign(slow)
+    client.tb_run()
+    time.sleep(0.2)
+    # Normal commands are rejected while running…
+    with pytest.raises(CommandError) as e:
+        client.set_channel(1, "VS", v=1.0)
+    assert e.value.err == "E_BUSY"
+    # …but status and abort are served
+    st = client.tb_status()
+    assert st["running"] is True
+    client.tb_abort()
+    ev = client.next_event("tb_done", timeout=5.0)
+    assert ev["aborted"] is True
+    # And the device is usable again afterwards
+    client.set_channel(1, "VS", v=1.0)
+
+
+def test_tb_run_empty_errors(client):
+    client.tb_clear()
+    with pytest.raises(CommandError) as e:
+        client.tb_run()
+    assert e.value.err == "E_STATE"
+
+
+# --------------------------------------------------------------------------- #
 # Telemetry rate
 # --------------------------------------------------------------------------- #
 

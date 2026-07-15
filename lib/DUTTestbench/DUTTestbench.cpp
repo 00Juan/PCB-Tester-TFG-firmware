@@ -24,7 +24,14 @@ void DUTTestRunner::begin(LVLPChannel* channels[], uint8_t count) {
 
 bool DUTTestRunner::addTest(const TestCase& tc) {
     if (testCount_ >= DUT_MAX_TESTS) return false;
-    tests_[testCount_++] = tc;
+    tests_[testCount_] = tc;
+    // Always keep the name in the stored test's own buffer so it survives
+    // regardless of whether the source was a string literal or a runtime
+    // buffer about to go out of scope (e.g. the protocol decoder's stack).
+    TestCase& stored = tests_[testCount_];
+    strlcpy(stored.nameBuf, tc.name ? tc.name : "unnamed", sizeof(stored.nameBuf));
+    stored.name = stored.nameBuf;
+    testCount_++;
     return true;
 }
 
@@ -37,13 +44,22 @@ void DUTTestRunner::clearTests() {
 // ============================================================================
 
 void DUTTestRunner::runAll(U8G2* display) {
-    display_ = display;
+    if (display) display_ = display;
+    running_ = true;
+    aborted_ = false;
+    abortRequested_ = false;
+    curTotal_ = testCount_;
+
     Serial.println(F("\n========================================"));
     Serial.println(F("  DUT Testbench — Starting test run"));
     Serial.printf ("  Total tests: %u\n", testCount_);
     Serial.println(F("========================================\n"));
 
     for (uint8_t i = 0; i < testCount_; i++) {
+        curIdx_ = i;
+        curT0_ = millis();
+        if (progressCb_) progressCb_(i, testCount_, tests_[i].name, 0);
+        display = display_;
         if (display) {
             display->clearBuffer();
             display->setFont(u8g2_font_5x8_mr);
@@ -70,9 +86,26 @@ void DUTTestRunner::runAll(U8G2* display) {
         }
 
         results_[i] = runOne(i); // safetyDisconnectAll + dutSetup handled inside
-        delay(50);               // brief inter-test pause
+        if (resultCb_) resultCb_(i, results_[i]);
+        if (abortRequested_) {
+            aborted_ = true;
+            // Mark remaining tests as skipped so the report stays consistent
+            for (uint8_t k = i + 1; k < testCount_; k++) {
+                results_[k].testName = tests_[k].name;
+                results_[k].outcome = OUTCOME_SKIP;
+                results_[k].measuredValue = 0.0f;
+                results_[k].expectedValue = 0.0f;
+                results_[k].elapsedMs = 0;
+                snprintf(results_[k].details, sizeof(results_[k].details),
+                         "skipped (campaign aborted)");
+            }
+            break;
+        }
+        interruptibleDelay(50); // brief inter-test pause
     }
 
+    safetyDisconnectAll();
+    running_ = false;
     printReport();
 }
 
@@ -95,10 +128,15 @@ TestResult DUTTestRunner::runOne(uint8_t index) {
     safetyDisconnectAll();
     if (tc.dutSetup) {
         tc.dutSetup();
-        delay(20); // allow DUT sim channels to settle
+        interruptibleDelay(20); // allow DUT sim channels to settle
     }
+    applySetupSteps(tc);
 
     TestResult result;
+    if (abortRequested_) {
+        fillAbortedResult(result, tc.name);
+        return result;
+    }
     switch (tc.type) {
         case TEST_VOLTAGE_THRESHOLD:        result = runVoltageThresholdTest(tc);        break;
         case TEST_VOLTAGE_ACCURACY:         result = runVoltageAccuracyTest(tc);         break;
@@ -119,6 +157,10 @@ TestResult DUTTestRunner::runOne(uint8_t index) {
             result.elapsedMs     = 0;
             snprintf(result.details, sizeof(result.details), "Unknown TestType %u", (uint8_t)tc.type);
             break;
+    }
+
+    if (abortRequested_) {
+        fillAbortedResult(result, tc.name);
     }
 
     Serial.printf("  -> %s  (%.4f / %.4f)  %u ms  %s\n\n",
@@ -163,6 +205,7 @@ TestResult DUTTestRunner::runVoltageThresholdTest(const TestCase& tc) {
 
     while (!allOk && (millis() - t0) < p.timeoutMs) {
         updateRealtimeDisplay(tc.name, millis() - t0, p.timeoutMs);
+        if (serviceAndCheckAbort()) break;
         allOk = true;
         for (uint8_t i = 0; i < chCount_; i++) {
             if (!(p.senseChannelMask & (1 << i))) continue;
@@ -296,7 +339,8 @@ TestResult DUTTestRunner::runVoltageRippleTest(const TestCase& tc) {
             float v = ch_[i]->readVoltage();
             if (v < vmin) vmin = v;
             if (v > vmax) vmax = v;
-            delay(intervalMs);
+            interruptibleDelay(intervalMs);
+            if (abortRequested_) break;
         }
 
         float ptP = vmax - vmin;
@@ -436,7 +480,8 @@ TestResult DUTTestRunner::runCurrentInrushTest(const TestCase& tc) {
             peakTimeMs  = (uint32_t)(millis() - t0);
         }
         sampleCount++;
-        delay(sampleInterval);
+        interruptibleDelay(sampleInterval);
+        if (abortRequested_) break;
     }
 
     r.elapsedMs = (uint32_t)(millis() - t0);
@@ -642,6 +687,7 @@ TestResult DUTTestRunner::runShortCircuitProtectionTest(const TestCase& tc) {
             }
         }
         if (faultFired) break;
+        if (serviceAndCheckAbort()) break;
         delay(1);
     }
 
@@ -712,7 +758,7 @@ TestResult DUTTestRunner::runLoadRegulationTest(const TestCase& tc) {
         float simVoltage = p.driveVoltage - 2.0f * p.loadCurrentA * SHUNT_R;
         if (simVoltage < 0.0f) simVoltage = 0.0f;
         applyChannelMask(p.loadChannelMask, MODE_VOLTAGE_SOURCE, simVoltage);
-        delay(p.settleMs);
+        interruptibleDelay(p.settleMs);
     }
 
     // Measure V_loaded on drive channels (load channels excluded)
@@ -1020,11 +1066,86 @@ void DUTTestRunner::updateRealtimeDisplay(const char* testName, uint32_t elapsed
 
 void DUTTestRunner::waitAndDisplay(uint32_t waitMs, const char* testName) {
     uint32_t start = millis();
-    while (millis() - start < waitMs) {
+    while (millis() - start < waitMs && !abortRequested_) {
         updateRealtimeDisplay(testName, millis() - start, waitMs);
+        serviceAndCheckAbort();
         delay(10);
     }
     updateRealtimeDisplay(testName, waitMs, waitMs);
+}
+
+// ============================================================================
+// Streaming / abort helpers
+// ============================================================================
+
+bool DUTTestRunner::serviceAndCheckAbort() {
+    if (commsHook_) commsHook_();
+    if (running_ && progressCb_) {
+        uint32_t now = millis();
+        if (now - lastProgressMs_ >= 500) {
+            lastProgressMs_ = now;
+            progressCb_(curIdx_, curTotal_, tests_[curIdx_].name, now - curT0_);
+        }
+    }
+    return abortRequested_;
+}
+
+void DUTTestRunner::interruptibleDelay(uint32_t ms) {
+    uint32_t start = millis();
+    while (millis() - start < ms && !abortRequested_) {
+        serviceAndCheckAbort();
+        uint32_t remaining = ms - (millis() - start);
+        delay(remaining < 10 ? remaining : 10);
+    }
+}
+
+void DUTTestRunner::fillAbortedResult(TestResult& r, const char* name) {
+    r.testName = name;
+    r.outcome = OUTCOME_ERROR;
+    r.measuredValue = 0.0f;
+    r.expectedValue = 0.0f;
+    r.elapsedMs = (uint32_t)(millis() - curT0_);
+    snprintf(r.details, sizeof(r.details), "aborted");
+}
+
+void DUTTestRunner::applySetupSteps(const TestCase& tc) {
+    for (uint8_t s = 0; s < tc.setupCount && s < DUT_MAX_SETUP_STEPS; s++) {
+        if (abortRequested_) return;
+        const SetupStep& st = tc.setup[s];
+        const bool chValid = st.ch >= 1 && st.ch <= chCount_;
+        switch (st.kind) {
+            case STEP_VS:
+                if (chValid) {
+                    ch_[st.ch - 1]->setMode(MODE_VOLTAGE_SOURCE);
+                    ch_[st.ch - 1]->setOutputVoltage(st.value);
+                    ch_[st.ch - 1]->update();
+                }
+                break;
+            case STEP_CS:
+                if (chValid) {
+                    ch_[st.ch - 1]->setMode(MODE_CURRENT_SOURCE);
+                    ch_[st.ch - 1]->setOutputCurrent(st.value);
+                    ch_[st.ch - 1]->update();
+                }
+                break;
+            case STEP_HZ:
+                if (chValid) ch_[st.ch - 1]->setMode(MODE_HIGH_IMPEDANCE);
+                break;
+            case STEP_PWM:
+                if (chValid) {
+                    ch_[st.ch - 1]->setMode(MODE_PWM_GENERATOR);
+                    if (st.value > 0.0f) ch_[st.ch - 1]->setOutputVoltage(st.value);
+                    ch_[st.ch - 1]->setPwm(st.duty, st.ms);
+                }
+                break;
+            case STEP_WAIT:
+                interruptibleDelay(st.ms);
+                break;
+            case STEP_SR_BIT:
+                if (sr_ && st.ch < 16) sr_->set(st.ch, st.value != 0.0f ? HIGH : LOW);
+                break;
+        }
+    }
 }
 
 const char* DUTTestRunner::outcomeStr(TestOutcome o) {

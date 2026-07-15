@@ -18,6 +18,7 @@ from .bridge import ClientBridge
 from .calibration import CalibrationTab
 from .cards import HpCard, HvCard, LimitsDialog, LvlpCard
 from .scope import ScopeTab
+from .testbench import TestbenchTab
 from .trends import TrendsTab
 
 N_LVLP, N_HP, N_HV = 8, 2, 1
@@ -57,9 +58,16 @@ class MainWindow(QMainWindow):
         self.scope_tab = ScopeTab(request_capture=self._request_capture)
         self.bridge.capture.connect(self.scope_tab.on_capture)
         self.cal_tab = CalibrationTab(get_client=lambda: self.client)
+        self.tb_tab = TestbenchTab(
+            get_client=lambda: self.client,
+            report_error=lambda m: self.statusBar().showMessage(m, 6000))
+        self.bridge.tb_progress.connect(self.tb_tab.on_tb_progress)
+        self.bridge.tb_result.connect(self.tb_tab.on_tb_result)
+        self.bridge.tb_done.connect(self.tb_tab.on_tb_done)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(dashboard, "Dashboard")
+        self.tabs.addTab(self.tb_tab, "Testbench")
         self.tabs.addTab(self.trends_tab, "Trends")
         self.tabs.addTab(self.scope_tab, "Scope")
         self.tabs.addTab(self.cal_tab, "Calibration")
