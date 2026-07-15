@@ -174,6 +174,11 @@ public:
     uint16_t getACS725ZeroADC() const { return acs725_zero_adc; }
 
     /**
+     * @brief Restore a previously calibrated zero baseline (e.g. from flash).
+     */
+    void setACS725ZeroADC(uint16_t zeroAdc) { acs725_zero_adc = zeroAdc; }
+
+    /**
      * @brief Print a ready-to-paste HPCHCalibrationData struct literal to Serial.
      *
      * Output format matches the hpCalData[] array in hardwareIOSetup.h so

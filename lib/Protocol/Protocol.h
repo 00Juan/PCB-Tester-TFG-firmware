@@ -2,6 +2,7 @@
 #define TESTER_PROTOCOL_H
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include "LVLPChannel.h"
 #include "HPCH.h"
 #include "HVChannel.h"
@@ -24,6 +25,11 @@
 //   {"id":10,"cmd":"telem.rate","hz":10}      // 0 = telemetry off
 //   {"id":11,"cmd":"estop"}
 //   {"id":12,"cmd":"estop.clear"}             // dismiss the latch indicator
+//   {"id":13,"cmd":"ch.capture","ch":1,"n":256,"dt_ms":2}  // voltage burst -> "capture" event
+//   {"id":14,"cmd":"cal.get","ch":1}          // ack carries "cal" object
+//   {"id":15,"cmd":"cal.set","ch":1,"cal":{...}}           // merge into RAM
+//   {"id":16,"cmd":"cal.save"}                // persist all channels to NVS
+//   {"id":17,"cmd":"cal.load"}                // reload all channels from NVS
 //
 // ESP32 → PC: every command is answered exactly once with
 //   {"type":"ack","id":N,"ok":true, ...}   or
@@ -33,15 +39,21 @@
 // Channel numbering: 1-8 = LVLP, 9-10 = HPCH, 11 = HV.
 // ============================================================================
 
+class CalibrationStore;
+
 class TesterProtocol {
 public:
-    static constexpr const char* FW_VERSION = "0.1.0";
+    static constexpr const char* FW_VERSION = "0.2.0";
     static constexpr uint8_t PROTO_VERSION = 1;
+    static constexpr uint16_t CAPTURE_MAX_SAMPLES = 512;
 
     void begin(LVLPChannel* lvlp, uint8_t lvlpCount,
                HPCH* hp, uint8_t hpCount,
                HVChannel* hv, uint8_t hvCount,
                Stream& io);
+
+    /// Optional: enables cal.save / cal.load (NVS persistence).
+    void setCalibrationStore(CalibrationStore* store) { calStore_ = store; }
 
     /// Drain the serial RX buffer; dispatch any complete command lines.
     void service();
@@ -90,7 +102,14 @@ private:
     uint8_t prevHpStatus_[2] = {0};
     uint8_t prevHvStatus_[1] = {0};
 
+    CalibrationStore* calStore_ = nullptr;
+
     void handleLine(char* line);
+    void handleCapture(long id, uint8_t ch, uint16_t n, uint16_t dtMs);
+    void handleCalGet(long id, uint8_t ch);
+    void handleCalSet(long id, uint8_t ch, JsonObjectConst cal);
+    void handleCalSave(long id);
+    void handleCalLoad(long id);
 };
 
 #endif // TESTER_PROTOCOL_H

@@ -113,6 +113,8 @@ class MockTester:
         self.hv = [_Hv(ch=self.N_LVLP + self.N_HP + i + 1) for i in range(self.N_HV)]
         self.estop_latched = False
         self.telem_hz = telem_hz
+        self.cal = self._default_cal()   # in-"RAM" calibration per channel
+        self._nvs: Dict[int, dict] = {}  # persisted by cal.save
 
         self._out: "queue.Queue[bytes]" = queue.Queue(maxsize=10000)
         self._lock = threading.RLock()
@@ -124,6 +126,23 @@ class MockTester:
 
     def transport(self) -> MockTransport:
         return MockTransport(self)
+
+    def _default_cal(self) -> Dict[int, dict]:
+        cal: Dict[int, dict] = {}
+        for i in range(self.N_LVLP):
+            cal[i + 1] = {"K1": 4.922409058, "K2": -3.926402569,
+                          "offset": 0.21726886, "mADC": 0.005097771,
+                          "bADC": -0.030085115, "mDAC": 819.581665039,
+                          "bDAC": -2.384184361}
+        for i in range(self.N_HP):
+            cal[self.N_LVLP + i + 1] = {
+                "mADC_VIn": 0.005075289, "bADC_VIn": 0.015266559,
+                "mADC_VOut": 0.005192232, "bADC_VOut": 0.00862406,
+                "sens": 0.132556796, "vref": 3.27, "zero_adc": 2048}
+        cal[self.N_LVLP + self.N_HP + 1] = {
+            "deadzone": 100, "vref": 3.27,
+            "points": [[100, 25.23], [118, 30.16], [176, 44.37], [243, 61.13]]}
+        return cal
 
     def stop(self) -> None:
         self._running = False
@@ -320,10 +339,48 @@ class MockTester:
             self._ack(msg_id, True, telem_hz=hz)
             return
 
+        if cmd.startswith("cal."):
+            self._handle_cal(msg_id, cmd, doc)
+            return
+
         if cmd.startswith("ch."):
             self._handle_ch(msg_id, cmd, doc)
             return
 
+        self._ack(msg_id, False, "E_CMD", "unknown cmd")
+
+    def _handle_cal(self, msg_id: int, cmd: str, doc: Dict[str, Any]) -> None:
+        if cmd == "cal.save":
+            self._nvs = {ch: dict(c) for ch, c in self.cal.items()}
+            self._ack(msg_id, True)
+            return
+        if cmd == "cal.load":
+            loaded = 0
+            for ch, c in self._nvs.items():
+                self.cal[ch] = dict(c)
+                loaded += 1
+            self._ack(msg_id, True, loaded=loaded)
+            return
+        if cmd in ("cal.get", "cal.set"):
+            ch = doc.get("ch", 0)
+            if not isinstance(ch, int) or ch not in self.cal:
+                self._ack(msg_id, False, "E_ARG", "ch out of range")
+                return
+            if cmd == "cal.get":
+                self._ack(msg_id, True, ch=ch, cal=self.cal[ch])
+            else:
+                incoming = doc.get("cal")
+                if not isinstance(incoming, dict):
+                    self._ack(msg_id, False, "E_ARG", "missing cal object")
+                    return
+                # Merge semantics, like the firmware
+                for k, v in incoming.items():
+                    if k in self.cal[ch]:
+                        self.cal[ch][k] = v
+                if "points" in self.cal[ch]:
+                    self.cal[ch]["points"].sort(key=lambda p: p[0])
+                self._ack(msg_id, True)
+            return
         self._ack(msg_id, False, "E_CMD", "unknown cmd")
 
     def _handle_ch(self, msg_id: int, cmd: str, doc: Dict[str, Any]) -> None:
@@ -417,6 +474,31 @@ class MockTester:
                 target.vmax = vmax
                 target.imax = imax
             self._ack(msg_id, True)
+            return
+
+        if cmd == "ch.capture":
+            n = doc.get("n", 128)
+            dt = doc.get("dt_ms", 2)
+            if (not isinstance(n, int) or not isinstance(dt, int)
+                    or n < 2 or n > 512 or dt < 1 or dt > 100 or n * dt > 5000):
+                self._ack(msg_id, False, "E_ARG",
+                          "need n 2-512, dt_ms 1-100, n*dt <= 5000 ms")
+                return
+            self._ack(msg_id, True, n=n, dt_ms=dt)
+            # Synthetic waveform around the channel's current level:
+            # noise + a small ripple so the scope view shows structure.
+            import math
+
+            if lc is not None:
+                base = lc.v
+            elif hc is not None:
+                base = hc.vout
+            else:
+                base = vc.v
+            samples = [round(base + 0.02 * math.sin(2 * math.pi * k / 25.0)
+                             + _noise(), 3) for k in range(n)]
+            self._emit({"type": "capture", "kind": "scope", "ch": ch,
+                        "dt_ms": dt, "unit": "V", "samples": samples})
             return
 
         if cmd == "ch.reset":

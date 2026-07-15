@@ -221,6 +221,68 @@ def test_physical_estop_button(client, mock):
 
 
 # --------------------------------------------------------------------------- #
+# Burst capture
+# --------------------------------------------------------------------------- #
+
+def test_capture_returns_requested_samples(client):
+    client.set_channel(1, "VS", v=2.5)
+    time.sleep(0.1)
+    ev = client.capture(1, n=64, dt_ms=2)
+    assert ev["ch"] == 1
+    assert ev["unit"] == "V"
+    assert ev["dt_ms"] == 2
+    assert len(ev["samples"]) == 64
+    assert all(abs(s - 2.5) < 0.2 for s in ev["samples"])
+
+
+def test_capture_validates_parameters(client):
+    with pytest.raises(CommandError) as e:
+        client.command("ch.capture", ch=1, n=10000, dt_ms=2)
+    assert e.value.err == "E_ARG"
+    with pytest.raises(CommandError):
+        client.command("ch.capture", ch=1, n=512, dt_ms=100)  # 51.2 s > 5 s cap
+
+
+# --------------------------------------------------------------------------- #
+# Calibration
+# --------------------------------------------------------------------------- #
+
+def test_cal_get_shapes(client):
+    lvlp = client.get_calibration(1)
+    assert set(lvlp) == {"K1", "K2", "offset", "mADC", "bADC", "mDAC", "bDAC"}
+    hp = client.get_calibration(9)
+    assert "sens" in hp and "zero_adc" in hp
+    hv = client.get_calibration(11)
+    assert hv["deadzone"] == 100
+    assert hv["points"][0] == [100, 25.23]
+
+
+def test_cal_set_merges(client):
+    client.set_calibration(1, {"offset": 0.5})
+    cal = client.get_calibration(1)
+    assert cal["offset"] == 0.5
+    assert cal["K1"] == pytest.approx(4.9224, abs=1e-3)  # untouched field
+
+
+def test_cal_save_load_roundtrip(client):
+    original = client.get_calibration(1)["offset"]
+    client.save_calibration()
+    client.set_calibration(1, {"offset": 9.9})
+    assert client.get_calibration(1)["offset"] == 9.9
+    ack = client.load_calibration()
+    assert ack["loaded"] == 11
+    assert client.get_calibration(1)["offset"] == original
+
+
+def test_cal_backup_restore_all_channels(client):
+    backup = {ch: client.get_calibration(ch) for ch in range(1, 12)}
+    client.set_calibration(5, {"offset": 1.234})
+    for ch, cal in backup.items():
+        client.set_calibration(ch, cal)
+    assert client.get_calibration(5)["offset"] == backup[5]["offset"]
+
+
+# --------------------------------------------------------------------------- #
 # Telemetry rate
 # --------------------------------------------------------------------------- #
 

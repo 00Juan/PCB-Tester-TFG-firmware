@@ -1,5 +1,5 @@
 #include "Protocol.h"
-#include <ArduinoJson.h>
+#include "CalibrationStore.h"
 
 // ============================================================================
 // Helpers
@@ -201,6 +201,34 @@ void TesterProtocol::handleLine(char* line) {
         return;
     }
 
+    // ---- cal.* ----------------------------------------------------------------
+    if (strncmp(cmd, "cal.", 4) == 0) {
+        if (strcmp(cmd, "cal.save") == 0) { handleCalSave(id); return; }
+        if (strcmp(cmd, "cal.load") == 0) { handleCalLoad(id); return; }
+        if (strcmp(cmd, "cal.get") == 0 || strcmp(cmd, "cal.set") == 0) {
+            int ch = doc["ch"] | 0;
+            if (ch < 1 || ch > nLvlp_ + nHp_ + nHv_) {
+                res["ok"] = false; res["err"] = "E_ARG"; res["msg"] = "ch out of range";
+                sendDoc(io_, res);
+                return;
+            }
+            if (cmd[4] == 'g') {
+                handleCalGet(id, (uint8_t)ch);
+            } else {
+                if (!doc["cal"].is<JsonObjectConst>()) {
+                    res["ok"] = false; res["err"] = "E_ARG"; res["msg"] = "missing cal object";
+                    sendDoc(io_, res);
+                    return;
+                }
+                handleCalSet(id, (uint8_t)ch, doc["cal"].as<JsonObjectConst>());
+            }
+            return;
+        }
+        res["ok"] = false; res["err"] = "E_CMD"; res["msg"] = "unknown cmd";
+        sendDoc(io_, res);
+        return;
+    }
+
     // ---- ch.* commands (all need a valid "ch") -------------------------------
     if (strncmp(cmd, "ch.", 3) == 0) {
         int ch = doc["ch"] | 0;
@@ -329,6 +357,20 @@ void TesterProtocol::handleLine(char* line) {
             sendDoc(io_, res);
             return;
         }
+
+        if (strcmp(cmd, "ch.capture") == 0) {
+            int n = doc["n"] | 128;
+            int dt = doc["dt_ms"] | 2;
+            if (n < 2 || n > (int)CAPTURE_MAX_SAMPLES || dt < 1 || dt > 100
+                || (long)n * dt > 5000) {
+                res["ok"] = false; res["err"] = "E_ARG";
+                res["msg"] = "need n 2-512, dt_ms 1-100, n*dt <= 5000 ms";
+                sendDoc(io_, res);
+                return;
+            }
+            handleCapture(id, (uint8_t)ch, (uint16_t)n, (uint16_t)dt);
+            return;
+        }
     }
 
     res["ok"] = false;
@@ -439,6 +481,198 @@ void TesterProtocol::pollFaultEvents() {
         }
         prevHvStatus_[i] = st;
     }
+}
+
+// ============================================================================
+// Burst capture (blocking; telemetry pauses for n*dt ms)
+// ============================================================================
+
+void TesterProtocol::handleCapture(long id, uint8_t ch, uint16_t n, uint16_t dtMs) {
+    static float buf[CAPTURE_MAX_SAMPLES];
+
+    // Ack immediately — the capture itself can take up to 5 s and the client
+    // waits for the "capture" event, not the ack.
+    {
+        JsonDocument res;
+        res["type"] = "ack";
+        if (id >= 0) res["id"] = id;
+        res["ok"] = true;
+        res["n"] = n;
+        res["dt_ms"] = dtMs;
+        sendDoc(io_, res);
+    }
+
+    const bool isLvlp = ch <= nLvlp_;
+    const bool isHp = !isLvlp && ch <= nLvlp_ + nHp_;
+
+    uint32_t next = millis();
+    for (uint16_t k = 0; k < n; k++) {
+        if (isLvlp)      buf[k] = lvlp_[ch - 1].readVoltage();
+        else if (isHp)   buf[k] = hp_[ch - 1 - nLvlp_].readVOut();
+        else             buf[k] = hv_[ch - 1 - nLvlp_ - nHp_].readVoltage();
+        next += dtMs;
+        while ((int32_t)(millis() - next) < 0) delayMicroseconds(100);
+    }
+
+    JsonDocument doc;
+    doc["type"] = "capture";
+    doc["kind"] = "scope";
+    doc["ch"] = ch;
+    doc["dt_ms"] = dtMs;
+    doc["unit"] = "V";
+    JsonArray arr = doc["samples"].to<JsonArray>();
+    for (uint16_t k = 0; k < n; k++) arr.add(round3(buf[k]));
+    sendDoc(io_, doc);
+}
+
+// ============================================================================
+// Calibration commands
+// ============================================================================
+
+void TesterProtocol::handleCalGet(long id, uint8_t ch) {
+    JsonDocument res;
+    res["type"] = "ack";
+    if (id >= 0) res["id"] = id;
+    res["ok"] = true;
+    res["ch"] = ch;
+    JsonObject cal = res["cal"].to<JsonObject>();
+
+    if (ch <= nLvlp_) {
+        const ChannelCalibrationData& d = lvlp_[ch - 1].getCalibrationData();
+        cal["K1"] = d.K1;       cal["K2"] = d.K2;    cal["offset"] = d.offset;
+        cal["mADC"] = d.mADC;   cal["bADC"] = d.bADC;
+        cal["mDAC"] = d.mDAC;   cal["bDAC"] = d.bDAC;
+    } else if (ch <= nLvlp_ + nHp_) {
+        HPCH& c = hp_[ch - 1 - nLvlp_];
+        const HPCHCalibrationData& d = c.getCalibrationData();
+        cal["mADC_VIn"] = d.mADC_VIn;   cal["bADC_VIn"] = d.bADC_VIn;
+        cal["mADC_VOut"] = d.mADC_VOut; cal["bADC_VOut"] = d.bADC_VOut;
+        cal["sens"] = d.acs725_sensitivity;
+        cal["vref"] = d.adc_vref;
+        cal["zero_adc"] = c.getACS725ZeroADC();
+    } else {
+        const HVChannelCalibrationData& d =
+            hv_[ch - 1 - nLvlp_ - nHp_].getCalibrationData();
+        cal["deadzone"] = d.deadZoneRaw;
+        cal["vref"] = d.adc_vref;
+        JsonArray pts = cal["points"].to<JsonArray>();
+        for (uint8_t k = 0; k < d.numPoints; k++) {
+            JsonArray p = pts.add<JsonArray>();
+            p.add(d.points[k].raw);
+            p.add(d.points[k].voltage);
+        }
+    }
+    sendDoc(io_, res);
+}
+
+void TesterProtocol::handleCalSet(long id, uint8_t ch, JsonObjectConst cal) {
+    // Merge semantics: fields absent from the request keep their current value.
+    if (ch <= nLvlp_) {
+        LVLPChannel& c = lvlp_[ch - 1];
+        ChannelCalibrationData d = c.getCalibrationData();
+        d.K1 = cal["K1"] | d.K1;         d.K2 = cal["K2"] | d.K2;
+        d.offset = cal["offset"] | d.offset;
+        d.mADC = cal["mADC"] | d.mADC;   d.bADC = cal["bADC"] | d.bADC;
+        d.mDAC = cal["mDAC"] | d.mDAC;   d.bDAC = cal["bDAC"] | d.bDAC;
+        c.setCalibrationData(d);
+    } else if (ch <= nLvlp_ + nHp_) {
+        HPCH& c = hp_[ch - 1 - nLvlp_];
+        HPCHCalibrationData d = c.getCalibrationData();
+        d.mADC_VIn = cal["mADC_VIn"] | d.mADC_VIn;
+        d.bADC_VIn = cal["bADC_VIn"] | d.bADC_VIn;
+        d.mADC_VOut = cal["mADC_VOut"] | d.mADC_VOut;
+        d.bADC_VOut = cal["bADC_VOut"] | d.bADC_VOut;
+        d.acs725_sensitivity = cal["sens"] | d.acs725_sensitivity;
+        d.adc_vref = cal["vref"] | d.adc_vref;
+        c.setCalibrationData(d);
+        if (cal["zero_adc"].is<int>()) c.setACS725ZeroADC(cal["zero_adc"].as<uint16_t>());
+    } else {
+        HVChannel& c = hv_[ch - 1 - nLvlp_ - nHp_];
+        HVChannelCalibrationData d = c.getCalibrationData();
+        d.deadZoneRaw = cal["deadzone"] | d.deadZoneRaw;
+        d.adc_vref = cal["vref"] | d.adc_vref;
+        if (cal["points"].is<JsonArrayConst>()) {
+            uint8_t np = 0;
+            for (JsonVariantConst pv : cal["points"].as<JsonArrayConst>()) {
+                if (np >= HV_CAL_MAX_POINTS) break;
+                JsonArrayConst pair = pv.as<JsonArrayConst>();
+                if (pair.size() < 2) continue;
+                d.points[np].raw = pair[0].as<uint16_t>();
+                d.points[np].voltage = pair[1].as<float>();
+                np++;
+            }
+            for (uint8_t k = np; k < HV_CAL_MAX_POINTS; k++) d.points[k] = {0, 0.0f};
+            d.numPoints = np;
+            // PWL lookup requires ascending raw order
+            for (uint8_t a = 1; a < np; a++) {
+                HVCalPoint key = d.points[a];
+                int8_t b = a - 1;
+                while (b >= 0 && d.points[b].raw > key.raw) {
+                    d.points[b + 1] = d.points[b];
+                    b--;
+                }
+                d.points[b + 1] = key;
+            }
+        }
+        c.setCalibrationData(d);
+    }
+
+    JsonDocument res;
+    res["type"] = "ack";
+    if (id >= 0) res["id"] = id;
+    res["ok"] = true;
+    sendDoc(io_, res);
+}
+
+void TesterProtocol::handleCalSave(long id) {
+    JsonDocument res;
+    res["type"] = "ack";
+    if (id >= 0) res["id"] = id;
+    if (!calStore_) {
+        res["ok"] = false; res["err"] = "E_STATE"; res["msg"] = "no calibration storage";
+        sendDoc(io_, res);
+        return;
+    }
+    bool ok = true;
+    for (uint8_t i = 0; i < nLvlp_; i++)
+        ok &= calStore_->saveLVLP(i, lvlp_[i].getCalibrationData());
+    for (uint8_t i = 0; i < nHp_; i++)
+        ok &= calStore_->saveHP(i, hp_[i].getCalibrationData(),
+                                hp_[i].getACS725ZeroADC());
+    for (uint8_t i = 0; i < nHv_; i++)
+        ok &= calStore_->saveHV(i, hv_[i].getCalibrationData());
+    res["ok"] = ok;
+    if (!ok) { res["err"] = "E_STATE"; res["msg"] = "NVS write failed"; }
+    sendDoc(io_, res);
+}
+
+void TesterProtocol::handleCalLoad(long id) {
+    JsonDocument res;
+    res["type"] = "ack";
+    if (id >= 0) res["id"] = id;
+    if (!calStore_) {
+        res["ok"] = false; res["err"] = "E_STATE"; res["msg"] = "no calibration storage";
+        sendDoc(io_, res);
+        return;
+    }
+    uint8_t loaded = 0;
+    ChannelCalibrationData ld;
+    for (uint8_t i = 0; i < nLvlp_; i++)
+        if (calStore_->loadLVLP(i, ld)) { lvlp_[i].setCalibrationData(ld); loaded++; }
+    HPCHCalibrationData hd;
+    uint16_t zero;
+    for (uint8_t i = 0; i < nHp_; i++)
+        if (calStore_->loadHP(i, hd, zero)) {
+            hp_[i].setCalibrationData(hd);
+            hp_[i].setACS725ZeroADC(zero);
+            loaded++;
+        }
+    HVChannelCalibrationData vd;
+    for (uint8_t i = 0; i < nHv_; i++)
+        if (calStore_->loadHV(i, vd)) { hv_[i].setCalibrationData(vd); loaded++; }
+    res["ok"] = true;
+    res["loaded"] = loaded;
+    sendDoc(io_, res);
 }
 
 // ============================================================================

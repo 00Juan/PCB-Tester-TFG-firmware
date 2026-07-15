@@ -1,8 +1,7 @@
 # pcbtester — PC-side software for the PCB Tester
 
-Python client library, device simulator and test suite for the PCB Tester's
-NDJSON serial protocol (firmware `[env:app]`, `lib/Protocol`). The PySide6 GUI
-(phase 3 of the roadmap) will build on this package.
+Python GUI, client library, device simulator and test suite for the PCB
+Tester's NDJSON serial protocol (firmware `[env:app]`, `lib/Protocol`).
 
 ## Install
 
@@ -12,6 +11,39 @@ python3 -m venv .venv && source .venv/bin/activate
 python -m pip install --upgrade pip   # macOS Python 3.9 ships a pip too old for pyproject editable installs
 pip install -e ".[dev]"
 ```
+
+## GUI
+
+```bash
+pcbtester-gui --mock      # instant demo against the simulated device
+pcbtester-gui             # real hardware: pick the port in the UI (or untick nothing and use --port)
+```
+
+What's on screen:
+
+- **Connection bar** — serial port selector (⟳ rescans), *Mock device*
+  checkbox, Connect/Disconnect, device identity, telemetry rate.
+- **Channel grid** — one card per channel. LVLP cards (CH1–8): live V/I,
+  mode selector (HZ/VS/CS/RL, PWM on CH1–4), setpoint editors, *Apply*.
+  HP/HV cards (CH9–11): live readings and a relay Connect/Disconnect toggle.
+  Every card has *Limits…* (protection thresholds) and a *Reset fault* button
+  that lights up when the channel latches.
+- **E-STOP** — the red button (or **Spacebar**) opens every output
+  immediately; a red banner shows until you *Clear E-stop*.
+- **Fault banner** — overcurrent/overvoltage events pop a banner and turn the
+  offending card red/blue until reset.
+- **Trends tab** — rolling live plots (10–300 s window) fed by telemetry:
+  LVLP CH1–8 voltage or current, plus HP/HV voltages; per-channel visibility
+  toggles and pause.
+- **Scope tab** — on-demand burst capture of any channel (2–512 samples,
+  1–100 ms interval, ≤5 s window) with min/max/pk-pk stats. Telemetry pauses
+  during the capture — that's the firmware sampling at a fixed rate.
+- **Calibration tab** — read/edit each channel's calibration as JSON, write
+  it back (RAM), *Save to device NVS* / *Reload from NVS*, and backup/restore
+  the whole device to a JSON file.
+
+The GUI is just another client of the protocol: everything it does can also be
+done from the REPL below, and it works identically against the mock.
 
 ## Try it without hardware (mock device)
 
@@ -78,6 +110,8 @@ Channel numbering everywhere: **1–8 = LVLP**, **9–10 = HP**, **11 = HV**.
 | `limits <ch> <vmax> [imax]` | `limits 1 5 0.1` | Protection limits; `imax` required except for ch 11 |
 | `reset <ch>` | `reset 1` | Clear a latched fault (channel is left disconnected) |
 | `rate <hz>` | `rate 5` | Telemetry rate 0–50 Hz (0 = off) |
+| `cap <ch> [n] [dt_ms]` | `cap 1 256 2` | Voltage burst capture, prints min/max/pk-pk |
+| `cal <ch>` | `cal 11` | Print the channel's calibration data |
 | `estop` | `estop` | Emergency stop: everything opens immediately |
 | `telem` | `telem` | Print the next telemetry frame |
 | `watch` | `watch` | Stream telemetry until you press Enter |
@@ -106,7 +140,19 @@ serial monitor. One JSON object per line; every command carries a client-chosen
 {"id":10,"cmd":"telem.rate","hz":10}                    // 0-50, 0 = off
 {"id":11,"cmd":"estop"}
 {"id":12,"cmd":"estop.clear"}                           // dismiss latch indicator only
+{"id":13,"cmd":"ch.capture","ch":1,"n":256,"dt_ms":2}   // burst -> "capture" event (blocking, <=5 s)
+{"id":14,"cmd":"cal.get","ch":1}                        // ack carries "cal" object
+{"id":15,"cmd":"cal.set","ch":1,"cal":{"offset":0.21}}  // merge into RAM
+{"id":16,"cmd":"cal.save"}                              // persist ALL channels to NVS flash
+{"id":17,"cmd":"cal.load"}                              // reload ALL channels from NVS
 ```
+
+Calibration `cal` shapes — LVLP: `K1,K2,offset,mADC,bADC,mDAC,bDAC`;
+HP: `mADC_VIn,bADC_VIn,mADC_VOut,bADC_VOut,sens,vref,zero_adc`;
+HV: `deadzone,vref,points:[[raw,volts],…]` (≤16 points, auto-sorted).
+`cal.set` merges: omitted fields keep their current values. On boot the
+firmware loads NVS calibration when present, else the `hardwareIOSetup.h`
+factory defaults.
 
 Acks:
 
@@ -132,6 +178,7 @@ Unsolicited events (no `id`), pushed by the device:
 {"type":"fault","ch":1,"code":"OVERCURRENT","v":4.98,"i":0.52}
 {"type":"estop","src":"cmd"}        // src: "cmd" | "button"
 {"type":"log","lvl":"info","msg":"PCB Tester app ready"}
+{"type":"capture","kind":"scope","ch":1,"dt_ms":2,"unit":"V","samples":[3.301,3.298, ...]}
 ```
 
 `st` status codes: 0 = normal, 1 = overcurrent, 2 = overvoltage, 3 = other
@@ -150,6 +197,9 @@ Unsolicited events (no `id`), pushed by the device:
 | `client.reset_channel(ch)` | `ch.reset` |
 | `client.set_telemetry_rate(hz)` | `telem.rate` |
 | `client.estop()` / `client.clear_estop()` | `estop` / `estop.clear` |
+| `client.capture(ch, n=128, dt_ms=2)` | `ch.capture` (returns the capture event) |
+| `client.get_calibration(ch)` / `client.set_calibration(ch, cal)` | `cal.get` / `cal.set` |
+| `client.save_calibration()` / `client.load_calibration()` | `cal.save` / `cal.load` |
 | `client.command(cmd, **params)` | anything (escape hatch) |
 | `client.next_event("telem")`, `client.events`, `client.on_fault = fn` | event access |
 

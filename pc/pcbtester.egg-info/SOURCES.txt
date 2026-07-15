@@ -11,5 +11,16 @@ pcbtester.egg-info/dependency_links.txt
 pcbtester.egg-info/entry_points.txt
 pcbtester.egg-info/requires.txt
 pcbtester.egg-info/top_level.txt
+pcbtester/gui/__init__.py
+pcbtester/gui/__main__.py
+pcbtester/gui/app.py
+pcbtester/gui/bridge.py
+pcbtester/gui/calibration.py
+pcbtester/gui/cards.py
+pcbtester/gui/mainwindow.py
+pcbtester/gui/palette.py
+pcbtester/gui/scope.py
+pcbtester/gui/trends.py
+tests/test_gui_smoke.py
 tests/test_hardware.py
 tests/test_protocol_mock.py

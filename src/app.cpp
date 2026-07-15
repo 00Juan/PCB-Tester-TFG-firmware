@@ -17,8 +17,10 @@
 #include <Arduino.h>
 #include "hardwareIOSetup.h"
 #include "Protocol.h"
+#include "CalibrationStore.h"
 
 static TesterProtocol proto;
+static CalibrationStore calStore;
 
 static constexpr uint32_t UPDATE_PERIOD_MS = 50; // channel update pass (20 Hz)
 static constexpr uint32_t OLED_PERIOD_MS = 250;
@@ -113,8 +115,29 @@ void setup() {
   hvChannels[0].init();
   hvChannels[0].setLimits(70.0f);
 
+  // Calibration from NVS overrides the hardwareIOSetup.h factory defaults;
+  // channels keep the defaults until the first cal.save.
+  uint8_t calLoaded = 0;
+  {
+    ChannelCalibrationData ld;
+    for (uint8_t i = 0; i < 8; i++)
+      if (calStore.loadLVLP(i, ld)) { lvlpChannels[i].setCalibrationData(ld); calLoaded++; }
+    HPCHCalibrationData hd;
+    uint16_t zero;
+    for (uint8_t i = 0; i < 2; i++)
+      if (calStore.loadHP(i, hd, zero)) {
+        hpChannels[i].setCalibrationData(hd);
+        hpChannels[i].setACS725ZeroADC(zero);
+        calLoaded++;
+      }
+    HVChannelCalibrationData vd;
+    if (calStore.loadHV(0, vd)) { hvChannels[0].setCalibrationData(vd); calLoaded++; }
+  }
+
   proto.begin(lvlpChannels, 8, hpChannels, 2, hvChannels, 1, Serial);
-  proto.log("info", "PCB Tester app ready");
+  proto.setCalibrationStore(&calStore);
+  Serial.printf("{\"type\":\"log\",\"lvl\":\"info\",\"msg\":\"PCB Tester app ready, cal from NVS: %u/11 channels\"}\n",
+                calLoaded);
 
   drawStatusScreen();
 }

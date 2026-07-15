@@ -66,6 +66,7 @@ class PCBTesterClient:
         self.on_fault: Optional[CommandCallback] = None
         self.on_estop: Optional[CommandCallback] = None
         self.on_log: Optional[CommandCallback] = None
+        self.on_capture: Optional[CommandCallback] = None
         #: Called with raw text for lines that are not JSON (boot prints etc.)
         self.on_raw: Optional[Callable[[str], None]] = None
 
@@ -171,6 +172,40 @@ class PCBTesterClient:
         """Dismiss the E-stop latch indicator (channels still need reset_channel)."""
         return self.command("estop.clear", **kw)
 
+    def capture(self, ch: int, n: int = 128, dt_ms: int = 2) -> Dict[str, Any]:
+        """Blocking voltage burst capture; returns the "capture" event dict
+        ({"ch","dt_ms","unit","samples":[...]}).
+
+        Note: pops from the shared event queue — in GUI code, prefer sending
+        the command and handling the on_capture callback instead.
+        """
+        self.command("ch.capture", ch=ch, n=n, dt_ms=dt_ms)
+        deadline_extra = n * dt_ms / 1000.0 + DEFAULT_TIMEOUT
+        while True:
+            ev = self.next_event("capture", timeout=deadline_extra)
+            if ev.get("ch") == ch:
+                return ev
+
+    # ------------------------------------------------------------------ #
+    # Calibration
+    # ------------------------------------------------------------------ #
+
+    def get_calibration(self, ch: int, **kw: Any) -> Dict[str, Any]:
+        """Return the channel's calibration data as a dict."""
+        return self.command("cal.get", ch=ch, **kw)["cal"]
+
+    def set_calibration(self, ch: int, cal: Dict[str, Any], **kw: Any) -> Dict[str, Any]:
+        """Merge calibration fields into the channel (RAM only until save)."""
+        return self.command("cal.set", ch=ch, cal=cal, **kw)
+
+    def save_calibration(self, **kw: Any) -> Dict[str, Any]:
+        """Persist every channel's calibration to the device's NVS flash."""
+        return self.command("cal.save", **kw)
+
+    def load_calibration(self, **kw: Any) -> Dict[str, Any]:
+        """Reload every channel's calibration from NVS (ack has "loaded")."""
+        return self.command("cal.load", **kw)
+
     # ------------------------------------------------------------------ #
     # Event helpers
     # ------------------------------------------------------------------ #
@@ -251,6 +286,7 @@ class PCBTesterClient:
             "fault": self.on_fault,
             "estop": self.on_estop,
             "log": self.on_log,
+            "capture": self.on_capture,
         }.get(msg.get("type"))
         if callback:
             try:

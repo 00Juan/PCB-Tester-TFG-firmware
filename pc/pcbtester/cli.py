@@ -14,6 +14,8 @@ Commands:
     limits <ch> <vmax> [imax]
     reset <ch>                clear latched fault
     rate <hz>                 telemetry rate (0 = off)
+    cap <ch> [n] [dt_ms]      voltage burst capture (prints stats)
+    cal <ch>                  print channel calibration
     estop
     telem                     print the next telemetry frame
     watch                     stream telemetry until Enter
@@ -123,6 +125,17 @@ def _run(client: PCBTesterClient, mock, line: str) -> bool:
         client.reset_channel(int(args[0]))
     elif cmd == "rate":
         client.set_telemetry_rate(int(args[0]))
+    elif cmd == "cap":
+        ch = int(args[0])
+        n = int(args[1]) if len(args) > 1 else 128
+        dt = int(args[2]) if len(args) > 2 else 2
+        ev = client.capture(ch, n=n, dt_ms=dt)
+        s = ev["samples"]
+        print(f"CH{ch}: {len(s)} pts @ {ev['dt_ms']} ms  "
+              f"min={min(s):.3f} max={max(s):.3f} pkpk={max(s) - min(s):.3f} "
+              f"{ev['unit']}")
+    elif cmd == "cal":
+        print(json.dumps(client.get_calibration(int(args[0])), indent=2))
     elif cmd == "estop":
         client.estop()
         print("E-STOP sent")
