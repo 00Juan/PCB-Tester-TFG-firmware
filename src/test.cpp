@@ -4,9 +4,9 @@
 
 constexpr uint8_t kNumChannels = 8;
 constexpr uint8_t kChannelsPerPage = 4;
-constexpr float kFixedVoltage = 1.5f;
-constexpr float kVoltageLimit = 12.0f;
-constexpr float kCurrentLimit = 0.10f;
+constexpr float kFixedVoltage = 9.0f;
+constexpr float kVoltageLimit = 11.0f;
+constexpr float kCurrentLimit = 0.03f;
 constexpr uint32_t kRefreshPeriodMs = 1000;
 
 void configureChannelAsFixedVoltage(LVLPChannel &channel)
@@ -27,11 +27,17 @@ void initializeHardware()
     digitalWrite(pinSrOe, LOW);
     sr.setAllLow();
 
-    for (uint8_t index = 0; index < kNumChannels; index++)
+    for (uint8_t index = 0; index < 4; index++)
     {
         lvlpChannels[index].init();
         configureChannelAsFixedVoltage(lvlpChannels[index]);
     }
+    for (uint8_t index = 4; index < kNumChannels; index++)
+    {
+        lvlpChannels[index].init();
+        lvlpChannels[index].setMode(MODE_HIGH_IMPEDANCE);
+    }
+
 }
 
 void updateChannels()
