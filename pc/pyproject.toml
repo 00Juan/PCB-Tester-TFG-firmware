@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcbtester"
+version = "0.1.0"
+description = "PC-side client library, mock device and (soon) GUI for the PCB Tester TFG"
+requires-python = ">=3.9"
+dependencies = [
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
+[project.scripts]
+pcbtester-repl = "pcbtester.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pcbtester*"]

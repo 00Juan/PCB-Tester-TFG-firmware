@@ -23,6 +23,7 @@
 //   {"id":9,"cmd":"ch.reset","ch":1}          // clear latched fault
 //   {"id":10,"cmd":"telem.rate","hz":10}      // 0 = telemetry off
 //   {"id":11,"cmd":"estop"}
+//   {"id":12,"cmd":"estop.clear"}             // dismiss the latch indicator
 //
 // ESP32 → PC: every command is answered exactly once with
 //   {"type":"ack","id":N,"ok":true, ...}   or

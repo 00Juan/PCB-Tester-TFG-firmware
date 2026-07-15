@@ -173,6 +173,14 @@ void TesterProtocol::handleLine(char* line) {
         return;
     }
 
+    // ---- estop.clear (channels still need individual ch.reset) ----------------
+    if (strcmp(cmd, "estop.clear") == 0) {
+        clearEstopLatch();
+        res["ok"] = true;
+        sendDoc(io_, res);
+        return;
+    }
+
     // ---- telem.rate ----------------------------------------------------------
     if (strcmp(cmd, "telem.rate") == 0) {
         if (!doc["hz"].is<int>()) {
