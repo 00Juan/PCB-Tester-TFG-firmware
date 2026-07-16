@@ -6,8 +6,9 @@
 // ============================================================================
 
 DUTTestRunner::DUTTestRunner()
-    : chCount_(0), testCount_(0) {
+    : chCount_(0), hpChCount_(0), testCount_(0) {
     for (uint8_t i = 0; i < DUT_MAX_CHANNELS; i++) ch_[i] = nullptr;
+    for (uint8_t i = 0; i < DUT_MAX_HP_CHANNELS; i++) hpCh_[i] = nullptr;
 }
 
 void DUTTestRunner::begin(LVLPChannel* channels[], uint8_t count) {
@@ -16,6 +17,13 @@ void DUTTestRunner::begin(LVLPChannel* channels[], uint8_t count) {
         ch_[i] = channels[i];
     }
     testCount_ = 0;
+}
+
+void DUTTestRunner::bindHPChannels(HPCH* channels[], uint8_t count) {
+    hpChCount_ = (count < DUT_MAX_HP_CHANNELS) ? count : DUT_MAX_HP_CHANNELS;
+    for (uint8_t i = 0; i < hpChCount_; i++) {
+        hpCh_[i] = channels[i];
+    }
 }
 
 // ============================================================================
@@ -860,9 +868,9 @@ TestResult DUTTestRunner::runStaticVoltageTest(const TestCase& tc) {
     r.expectedValue = p.expectedVoltage;
     r.measuredValue = 0.0f;
 
-    if (p.senseChannelMask == 0) {
+    if (p.senseChannelMask == 0 && p.senseHPChannelMask == 0) {
         r.outcome = OUTCOME_ERROR;
-        snprintf(r.details, sizeof(r.details), "Sense channel mask is 0");
+        snprintf(r.details, sizeof(r.details), "Sense channel masks are 0");
         r.elapsedMs = 0;
         return r;
     }
@@ -873,32 +881,51 @@ TestResult DUTTestRunner::runStaticVoltageTest(const TestCase& tc) {
     float worstError = 0.0f;
     uint8_t worstCh  = 0;
     float   worstMeas = 0.0f;
+    bool    worstIsHP = false;
+    bool    anyMeasured = false;
 
     for (uint8_t i = 0; i < chCount_; i++) {
         if (!(p.senseChannelMask & (1 << i))) continue;
         float meas = sampleAverageVoltage(i, 8);
         float err  = fabsf(meas - p.expectedVoltage);
-        if (err > worstError) {
+        if (err > worstError || !anyMeasured) {
             worstError = err;
             worstCh    = i;
             worstMeas  = meas;
+            worstIsHP  = false;
         }
+        anyMeasured = true;
+    }
+
+    for (uint8_t i = 0; i < hpChCount_; i++) {
+        if (!(p.senseHPChannelMask & (1 << i))) continue;
+        float meas = sampleAverageHPVoltage(i, 8);
+        float err  = fabsf(meas - p.expectedVoltage);
+        if (err > worstError || !anyMeasured) {
+            worstError = err;
+            worstCh    = i;
+            worstMeas  = meas;
+            worstIsHP  = true;
+        }
+        anyMeasured = true;
     }
 
     r.elapsedMs     = (uint32_t)(millis() - t0);
     r.measuredValue = worstMeas;
     r.expectedValue = p.expectedVoltage;
 
+    const char* chPrefix = worstIsHP ? "HPCH" : "CH";
+
     if (worstError <= p.toleranceVolts) {
         r.outcome = OUTCOME_PASS;
         snprintf(r.details, sizeof(r.details),
-                 "Voltage %.4f V (target %.4f V) err %.4f V <= tol %.4f V on CH%u",
-                 worstMeas, p.expectedVoltage, worstError, p.toleranceVolts, worstCh + 1);
+                 "Voltage %.4f V (target %.4f V) err %.4f V <= tol %.4f V on %s%u",
+                 worstMeas, p.expectedVoltage, worstError, p.toleranceVolts, chPrefix, worstCh + 1);
     } else {
         r.outcome = OUTCOME_FAIL;
         snprintf(r.details, sizeof(r.details),
-                 "Voltage %.4f V (target %.4f V) err %.4f V > tol %.4f V on CH%u",
-                 worstMeas, p.expectedVoltage, worstError, p.toleranceVolts, worstCh + 1);
+                 "Voltage %.4f V (target %.4f V) err %.4f V > tol %.4f V on %s%u",
+                 worstMeas, p.expectedVoltage, worstError, p.toleranceVolts, chPrefix, worstCh + 1);
     }
 
     return r;
@@ -1015,6 +1042,16 @@ float DUTTestRunner::sampleAverageVoltage(uint8_t chIdx, uint8_t numSamples) {
     float sum = 0.0f;
     for (uint8_t s = 0; s < numSamples; s++) {
         sum += ch_[chIdx]->readVoltage();
+        if (s < numSamples - 1) delay(2);
+    }
+    return sum / numSamples;
+}
+
+float DUTTestRunner::sampleAverageHPVoltage(uint8_t hpIdx, uint8_t numSamples) {
+    if (hpIdx >= hpChCount_ || !hpCh_[hpIdx] || numSamples == 0) return 0.0f;
+    float sum = 0.0f;
+    for (uint8_t s = 0; s < numSamples; s++) {
+        sum += hpCh_[hpIdx]->readVOut();
         if (s < numSamples - 1) delay(2);
     }
     return sum / numSamples;

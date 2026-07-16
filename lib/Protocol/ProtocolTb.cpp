@@ -225,10 +225,12 @@ bool TesterProtocol::decodeTestCase(JsonObjectConst t, TestCase& out,
         }
         case TEST_STATIC_VOLTAGE: {
             auto& d = out.staticVoltage;
-            d.senseChannelMask = p["sense_mask"] | 0;
-            d.expectedVoltage  = p["expected_v"] | 0.0f;
-            d.toleranceVolts   = p["tolerance_v"] | 0.2f;
-            d.settleMs         = p["settle_ms"] | 100;
+            d.senseChannelMask   = p["sense_mask"] | 0;
+            d.expectedVoltage    = p["expected_v"] | 0.0f;
+            d.toleranceVolts     = p["tolerance_v"] | 0.2f;
+            d.settleMs           = p["settle_ms"] | 100;
+            // Optional HP-channel sensing (bit 0 = HPCH1/CH9, bit 1 = HPCH2/CH10)
+            d.senseHPChannelMask = p["sense_hp_mask"] | 0;
             break;
         }
     }

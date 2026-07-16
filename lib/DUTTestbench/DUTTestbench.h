@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include "LVLPChannel.h"
+#include "HPCH.h"
 
 // ============================================================================
 // CONSTANTS
@@ -11,6 +12,7 @@
 
 static constexpr uint8_t DUT_MAX_TESTS    = 32;
 static constexpr uint8_t DUT_MAX_CHANNELS = 8;
+static constexpr uint8_t DUT_MAX_HP_CHANNELS = 2;
 
 // Maximum samples collected for ripple / inrush captures
 static constexpr uint8_t DUT_MAX_SAMPLES  = 64;
@@ -248,13 +250,18 @@ struct CrossChannelIsolationParams {
  * Passively read the voltage on senseChannelMask after settleMs.
  * PASS if |measured - expectedVoltage| <= toleranceVolts on all channels.
  *
+ * Optionally, senseHPChannelMask selects HP power channels whose VOut is
+ * read with the same expected/tolerance (requires bindHPChannels()).
+ * At least one of the two masks must be non-zero.
+ *
  * measuredValue = worst-case error from expected (V).
  */
 struct StaticVoltageParams {
-    uint8_t  senseChannelMask;   ///< Channel(s) to read
+    uint8_t  senseChannelMask;   ///< LVLP channel(s) to read (0 = none)
     float    expectedVoltage;    ///< Target voltage (V)
     float    toleranceVolts;     ///< Allowed error band (V)
     uint32_t settleMs;           ///< Delay before sampling (ms)
+    uint8_t  senseHPChannelMask; ///< HP channel(s) to read VOut (bit 0 = HPCH1/CH9, bit 1 = HPCH2/CH10; 0 = none)
 };
 
 // ============================================================================
@@ -373,6 +380,14 @@ public:
     /// Bind the shift register used by STEP_SR_BIT setup steps.
     void bindShiftRegister(ShiftRegister74HC595<2>* sr) { sr_ = sr; }
 
+    /**
+     * @brief Bind HP power channels so TEST_STATIC_VOLTAGE can sense their
+     *        VOut node via senseHPChannelMask.
+     * @param channels  Array of HPCH pointers (must stay valid for the runner's lifetime)
+     * @param count     Number of HP channels (max DUT_MAX_HP_CHANNELS)
+     */
+    void bindHPChannels(HPCH* channels[], uint8_t count);
+
     void setCommsHook(DUTCommsHook hook) { commsHook_ = hook; }
     void setProgressCallback(DUTProgressFn cb) { progressCb_ = cb; }
     void setResultCallback(DUTResultFn cb) { resultCb_ = cb; }
@@ -439,6 +454,9 @@ private:
     LVLPChannel* ch_[DUT_MAX_CHANNELS];
     uint8_t      chCount_;
 
+    HPCH*   hpCh_[DUT_MAX_HP_CHANNELS];
+    uint8_t hpChCount_ = 0;
+
     TestCase   tests_[DUT_MAX_TESTS];
     TestResult results_[DUT_MAX_TESTS];
     uint8_t    testCount_;
@@ -485,6 +503,9 @@ private:
 
     /// Samples the average voltage of a single channel (numSamples averaged)
     float sampleAverageVoltage(uint8_t chIdx, uint8_t numSamples);
+
+    /// Samples the average VOut of a bound HP channel (numSamples averaged)
+    float sampleAverageHPVoltage(uint8_t hpIdx, uint8_t numSamples);
 
     /// Render test status in real-time
     void updateRealtimeDisplay(const char* testName, uint32_t elapsedMs, uint32_t totalMs);

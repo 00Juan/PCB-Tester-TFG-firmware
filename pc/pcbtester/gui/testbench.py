@@ -5,6 +5,12 @@ A campaign is a list of test dicts ({"name","type","setup":[…],"params":{…}}
 matching the firmware's tb.add schema 1:1. Campaign files are JSON documents
 {"format":"pcbtester-campaign","name":…,"tests":[…]} kept under pc/campaigns/.
 
+Campaign files may also carry optional "pre" / "post" lists of raw protocol
+commands ({"cmd":"ch.connect","ch":9}, … or {"cmd":"wait","ms":300}) that the
+GUI sends once before tb.run and once after tb_done. Used e.g. by the TSAL
+campaign to close the HP relays (CH9/CH10 LED pull-ups) and the HV relay
+(CH11, DUT GND return) for the whole run and release them afterwards.
+
 The test editor is schema-driven: TEST_SCHEMAS maps each test type to its
 parameter fields, from which the form is generated. A JSON tab mirrors the
 same test object for hand editing (power users / copy-paste).
@@ -51,6 +57,7 @@ TEST_TYPES = [
 TEST_SCHEMAS: Dict[str, list] = {
     "static_voltage": [
         ("sense_mask", "Sense channels", "mask", 0, 0, 0),
+        ("sense_hp_mask", "Sense HP mask (1=CH9, 2=CH10, 3=both)", "int", 0, 3, 0),
         ("expected_v", "Expected voltage (V)", "float", -1.0, 15.0, 12.0),
         ("tolerance_v", "Tolerance (V)", "float", 0.0, 5.0, 0.5),
         ("settle_ms", "Settle (ms)", "int", 0, 60000, 200),
@@ -327,6 +334,10 @@ class TestbenchTab(QWidget):
         self._get_client = get_client
         self._report = report_error
         self.tests: List[dict] = []
+        # Raw protocol commands run once before tb.run / after tb_done
+        # (campaign JSON "pre" / "post" lists; see module docstring).
+        self.pre_cmds: List[dict] = []
+        self.post_cmds: List[dict] = []
         self.campaign_name = "campaign"
         self._running = False
         self._done_summary: Optional[dict] = None  # for selftest/export
@@ -489,6 +500,8 @@ class TestbenchTab(QWidget):
             self._report(f"campaign load failed: {e}")
             return
         self.tests = tests
+        self.pre_cmds = data.get("pre", []) or []
+        self.post_cmds = data.get("post", []) or []
         self.name_edit.setText(data.get("name", Path(path).stem))
         self._refresh_list()
 
@@ -501,12 +514,38 @@ class TestbenchTab(QWidget):
             return
         data = {"format": "pcbtester-campaign", "version": 1, "name": name,
                 "tests": self.tests}
+        if self.pre_cmds:
+            data["pre"] = self.pre_cmds
+        if self.post_cmds:
+            data["post"] = self.post_cmds
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
 
     # ------------------------------------------------------------------ #
     # Run / events
     # ------------------------------------------------------------------ #
+
+    def _exec_cmds(self, client, cmds: List[dict], label: str) -> bool:
+        """Send the campaign's raw pre/post protocol commands one by one.
+
+        Supported entries: {"cmd":"wait","ms":N} (host-side sleep) or any
+        protocol command object, e.g. {"cmd":"ch.connect","ch":9}.
+        Returns False on the first failure (already reported).
+        """
+        import time
+        from ..client import CommandError, ProtocolTimeout
+
+        for c in cmds:
+            try:
+                if c.get("cmd") == "wait":
+                    time.sleep(float(c.get("ms", 0)) / 1000.0)
+                    continue
+                args = {k: v for k, v in c.items() if k != "cmd"}
+                client.command(c["cmd"], **args)
+            except (CommandError, ProtocolTimeout, KeyError, TypeError) as e:
+                self._report(f"campaign {label} step {c}: {e}")
+                return False
+        return True
 
     def _run(self) -> None:
         client = self._get_client()
@@ -522,11 +561,15 @@ class TestbenchTab(QWidget):
         self._result_rows = []
         self._done_summary = None
         self.summary_label.setText("")
+        if not self._exec_cmds(client, self.pre_cmds, "pre"):
+            self._exec_cmds(client, self.post_cmds, "post")  # release relays
+            return
         try:
             client.load_campaign(self.tests)
             client.tb_run()
         except (CommandError, ProtocolTimeout) as e:
             self._report(f"testbench: {e}")
+            self._exec_cmds(client, self.post_cmds, "post")
             return
         self._set_running(True)
 
@@ -583,6 +626,10 @@ class TestbenchTab(QWidget):
         self.summary_label.setText(
             f'<b>{msg.get("pass", 0)} passed · {msg.get("fail", 0)} failed'
             f' · {msg.get("total", 0)} total{aborted}</b>')
+        # Campaign teardown (also after an abort): release relays, etc.
+        client = self._get_client()
+        if client is not None and self.post_cmds:
+            self._exec_cmds(client, self.post_cmds, "post")
 
     # ------------------------------------------------------------------ #
     # Export

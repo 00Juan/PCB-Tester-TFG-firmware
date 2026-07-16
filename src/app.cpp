@@ -24,6 +24,7 @@ static TesterProtocol proto;
 static CalibrationStore calStore;
 static DUTTestRunner testRunner;
 static LVLPChannel* lvlpPtrs[8];
+static HPCH* hpPtrs[2];
 
 static constexpr uint32_t UPDATE_PERIOD_MS = 50; // channel update pass (20 Hz)
 static constexpr uint32_t OLED_PERIOD_MS = 250;
@@ -147,7 +148,9 @@ void setup() {
   }
 
   for (uint8_t i = 0; i < 8; i++) lvlpPtrs[i] = &lvlpChannels[i];
+  for (uint8_t i = 0; i < 2; i++) hpPtrs[i] = &hpChannels[i];
   testRunner.begin(lvlpPtrs, 8);
+  testRunner.bindHPChannels(hpPtrs, 2); // sense_hp_mask in static_voltage tests
   testRunner.bindShiftRegister(&sr);
   testRunner.setDisplay(&u8g2);
 

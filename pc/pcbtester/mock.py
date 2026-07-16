@@ -742,8 +742,12 @@ class MockTester:
             self._tb_sleep(p.get("settle_ms", 100))
             expected = p.get("expected_v", 0.0)
             vs = read_v(p.get("sense_mask", 0))
+            hp_mask = p.get("sense_hp_mask", 0)
+            with self._lock:
+                vs += [self.hp[i].vout for i in range(len(self.hp))
+                       if hp_mask & (1 << i)]
             if not vs:
-                return "ERROR", 0.0, expected, "Sense channel mask is 0"
+                return "ERROR", 0.0, expected, "Sense channel masks are 0"
             worst = max(abs(v - expected) for v in vs)
             ok = worst <= p.get("tolerance_v", 0.2)
             return ("PASS" if ok else "FAIL"), worst, expected, \

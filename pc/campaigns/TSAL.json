@@ -1,0 +1,1281 @@
+{
+  "format": "pcbtester-campaign",
+  "version": 1,
+  "name": "TSAL",
+  "description": "TSAL (Tractive System Active Light) \u2014 port of test_TSAL.cpp. Wiring: CH1=HV_Accu_State, CH2=AIR-_AUX2, CH3=AIR-_Coil, CH4=SDC_END, CH5=Precharge_Coil, CH6=PRECHARGE_AUX2, CH7=AIR+_AUX2, CH8=AIR+_Coil, CH9(HP)=GreenLed, CH10(HP)=RedLed (open-drain vs 12V rail: LED ON=0V, OFF=12V), CH11(HV)=DUT GND return. LV supply is external; 'pre' powers the DUT once (no latching -> no power-cycling between tests) and 'post' releases all relays. Red circuit is never energized (no HV on HV+): RedLed must stay OFF in every test.",
+  "pre": [
+    {
+      "cmd": "ch.limits",
+      "ch": 9,
+      "vmax": 15.0,
+      "imax": 1.0
+    },
+    {
+      "cmd": "ch.limits",
+      "ch": 10,
+      "vmax": 15.0,
+      "imax": 1.0
+    },
+    {
+      "cmd": "ch.connect",
+      "ch": 9
+    },
+    {
+      "cmd": "ch.connect",
+      "ch": 10
+    },
+    {
+      "cmd": "ch.connect",
+      "ch": 11
+    },
+    {
+      "cmd": "wait",
+      "ms": 300
+    }
+  ],
+  "post": [
+    {
+      "cmd": "ch.disconnect",
+      "ch": 11
+    },
+    {
+      "cmd": "ch.disconnect",
+      "ch": 9
+    },
+    {
+      "cmd": "ch.disconnect",
+      "ch": 10
+    }
+  ],
+  "tests": [
+    {
+      "name": "Safe: TS_is_OFF=1 Green ON",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 0.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "Safe: Red_On=0 Red OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 2,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "HV pres: TS_is_OFF=0 Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "AIR+ cls: TS_is_OFF=0 GrnOFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 0.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "AIR- cls: TS_is_OFF=0 GrnOFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "PRE cls: TS_is_OFF=0 Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "AIR+_Stuck=1 Green OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 0.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "AIR-_Stuck=1 Green OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "PRECHARGE_Stuck=1 Green OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "RlyClsdNoVolt AIR+ Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 0.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "RlyClsdNoVolt AIR- Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "RlyClsdNoVolt PRE Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS AIR+AUX2 gnd: Green OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS AIR-AUX2 gnd: Green OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS PREAUX2 gnd: Green OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS HVAccu gnd: Green OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS AIR+AUX2 open: Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "hz",
+          "ch": 7
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS AIR-AUX2 open: Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "hz",
+          "ch": 2
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS PREAUX2 open: Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "hz",
+          "ch": 6
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "SCS HVAccu open: Grn OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "hz",
+          "ch": 1
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "Implaus clear: Green auto-ON",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 0.0
+        },
+        {
+          "step": "wait",
+          "ms": 500
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 5.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 1,
+        "expected_v": 0.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "Implaus: Red_On=0 Red OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 0.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 2,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    },
+    {
+      "name": "TS inputs ON: Red OFF",
+      "type": "static_voltage",
+      "setup": [
+        {
+          "step": "vs",
+          "ch": 1,
+          "v": 0.8
+        },
+        {
+          "step": "vs",
+          "ch": 2,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 3,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 4,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 5,
+          "v": 0.0
+        },
+        {
+          "step": "vs",
+          "ch": 6,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 7,
+          "v": 5.0
+        },
+        {
+          "step": "vs",
+          "ch": 8,
+          "v": 0.0
+        }
+      ],
+      "params": {
+        "sense_mask": 0,
+        "sense_hp_mask": 2,
+        "expected_v": 12.0,
+        "tolerance_v": 2.0,
+        "settle_ms": 500
+      }
+    }
+  ]
+}
