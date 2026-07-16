@@ -1,0 +1,243 @@
+{
+  "campaign": "TSAL",
+  "date": "2026-07-16T16:26:21",
+  "summary": {
+    "type": "tb_done",
+    "total": 23,
+    "pass": 21,
+    "fail": 2,
+    "aborted": false
+  },
+  "results": [
+    {
+      "type": "tb_result",
+      "test": 0,
+      "name": "Safe: TS_is_OFF=1 Green ON",
+      "outcome": "FAIL",
+      "measured": 10.50861,
+      "expected": 0,
+      "ms": 550,
+      "detail": "Voltage 10.5086 V (target 0.0000 V) err 10.5086 V > tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 1,
+      "name": "Safe: Red_On=0 Red OFF",
+      "outcome": "PASS",
+      "measured": 10.52887,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5289 V (target 12.0000 V) err 1.4711 V <= tol 2.0000 V on HPCH2"
+    },
+    {
+      "type": "tb_result",
+      "test": 2,
+      "name": "HV pres: TS_is_OFF=0 Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.96683,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.9668 V (target 12.0000 V) err 1.0332 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 3,
+      "name": "AIR+ cls: TS_is_OFF=0 GrnOFF",
+      "outcome": "PASS",
+      "measured": 10.96943,
+      "expected": 12,
+      "ms": 549,
+      "detail": "Voltage 10.9694 V (target 12.0000 V) err 1.0306 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 4,
+      "name": "AIR- cls: TS_is_OFF=0 GrnOFF",
+      "outcome": "PASS",
+      "measured": 10.96878,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.9688 V (target 12.0000 V) err 1.0312 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 5,
+      "name": "PRE cls: TS_is_OFF=0 Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.97202,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.9720 V (target 12.0000 V) err 1.0280 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 6,
+      "name": "AIR+_Stuck=1 Green OFF",
+      "outcome": "PASS",
+      "measured": 10.51511,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5151 V (target 12.0000 V) err 1.4849 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 7,
+      "name": "AIR-_Stuck=1 Green OFF",
+      "outcome": "PASS",
+      "measured": 10.51575,
+      "expected": 12,
+      "ms": 549,
+      "detail": "Voltage 10.5158 V (target 12.0000 V) err 1.4842 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 8,
+      "name": "PRECHARGE_Stuck=1 Green OFF",
+      "outcome": "PASS",
+      "measured": 10.5203,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5203 V (target 12.0000 V) err 1.4797 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 9,
+      "name": "RlyClsdNoVolt AIR+ Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.51965,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5196 V (target 12.0000 V) err 1.4804 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 10,
+      "name": "RlyClsdNoVolt AIR- Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.5216,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5216 V (target 12.0000 V) err 1.4784 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 11,
+      "name": "RlyClsdNoVolt PRE Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.52614,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5261 V (target 12.0000 V) err 1.4739 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 12,
+      "name": "SCS AIR+AUX2 gnd: Green OFF",
+      "outcome": "PASS",
+      "measured": 10.52289,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5229 V (target 12.0000 V) err 1.4771 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 13,
+      "name": "SCS AIR-AUX2 gnd: Green OFF",
+      "outcome": "PASS",
+      "measured": 10.52549,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5255 V (target 12.0000 V) err 1.4745 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 14,
+      "name": "SCS PREAUX2 gnd: Green OFF",
+      "outcome": "PASS",
+      "measured": 10.52484,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5248 V (target 12.0000 V) err 1.4752 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 15,
+      "name": "SCS HVAccu gnd: Green OFF",
+      "outcome": "PASS",
+      "measured": 10.98111,
+      "expected": 12,
+      "ms": 549,
+      "detail": "Voltage 10.9811 V (target 12.0000 V) err 1.0189 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 16,
+      "name": "SCS AIR+AUX2 open: Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.52419,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5242 V (target 12.0000 V) err 1.4758 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 17,
+      "name": "SCS AIR-AUX2 open: Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.52484,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5248 V (target 12.0000 V) err 1.4752 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 18,
+      "name": "SCS PREAUX2 open: Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.98241,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.9824 V (target 12.0000 V) err 1.0176 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 19,
+      "name": "SCS HVAccu open: Grn OFF",
+      "outcome": "PASS",
+      "measured": 10.97916,
+      "expected": 12,
+      "ms": 549,
+      "detail": "Voltage 10.9792 V (target 12.0000 V) err 1.0208 V <= tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 20,
+      "name": "Implaus clear: Green auto-ON",
+      "outcome": "FAIL",
+      "measured": 10.52809,
+      "expected": 0,
+      "ms": 550,
+      "detail": "Voltage 10.5281 V (target 0.0000 V) err 10.5281 V > tol 2.0000 V on HPCH1"
+    },
+    {
+      "type": "tb_result",
+      "test": 21,
+      "name": "Implaus: Red_On=0 Red OFF",
+      "outcome": "PASS",
+      "measured": 10.54512,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.5451 V (target 12.0000 V) err 1.4549 V <= tol 2.0000 V on HPCH2"
+    },
+    {
+      "type": "tb_result",
+      "test": 22,
+      "name": "TS inputs ON: Red OFF",
+      "outcome": "PASS",
+      "measured": 10.98799,
+      "expected": 12,
+      "ms": 550,
+      "detail": "Voltage 10.9880 V (target 12.0000 V) err 1.0120 V <= tol 2.0000 V on HPCH2"
+    }
+  ]
+}

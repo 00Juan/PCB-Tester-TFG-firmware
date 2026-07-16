@@ -446,7 +446,7 @@ void setup() {
 
   for (uint8_t i = 0; i < 8; i++) {
     lvlpChannels[i].init();
-    lvlpChannels[i].setLimits(12.0f, 0.5f);
+    lvlpChannels[i].setLimits(12.0f, 0.05f);
   }
 
   // GreenLed (HPCH1/CH9) and RedLed (HPCH2/CH10): the LED lines are pulled
