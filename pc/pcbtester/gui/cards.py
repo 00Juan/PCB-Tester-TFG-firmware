@@ -38,6 +38,7 @@ class _CardBase(QFrame):
         self.setFrameShape(QFrame.StyledPanel)
         self.setProperty("card", True)
         self._faulted = False
+        self._base_title = title
 
         self.status_label = QLabel(_dot(_COLOR_OFF))
         self.status_label.setTextFormat(Qt.RichText)
@@ -59,6 +60,15 @@ class _CardBase(QFrame):
         self._layout.setSpacing(6)
         self._layout.addLayout(header)
         self._layout.addWidget(self.live_label)
+
+    def set_signal_name(self, name: Optional[str]) -> None:
+        """Append the DUT profile's signal name to the card title."""
+        import html
+
+        title = self._base_title
+        if name:
+            title += f" · {html.escape(name)}"
+        self.title_label.setText(f"<b>{title}</b>")
 
     def _set_status(self, st: int, conn: bool, state_text: str) -> None:
         self._faulted = st != 0

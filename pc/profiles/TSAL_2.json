@@ -1,0 +1,401 @@
+{
+  "format": "pcbtester-dut-profile",
+  "version": 1,
+  "name": "TSAL_2",
+  "description": "TSAL DUT profile. Wiring as in campaigns/TSAL.json: LVLP CH1-8 drive the control-loop signals, CH9/CH10 (HP) are the open-drain LED pull-ups vs the 12V rail (LED ON = ~0V at the pin, OFF = ~12V), CH11 (HV relay) switches the DUT GND return. LV supply is external.",
+  "channels": {
+    "1": "HV_Accu_State",
+    "2": "AIR-_AUX2",
+    "3": "AIR-_Coil",
+    "4": "SDC_END",
+    "5": "Precharge_Coil",
+    "6": "PRECHARGE_AUX2",
+    "7": "AIR+_AUX2",
+    "8": "AIR+_Coil",
+    "9": "GreenLed",
+    "10": "RedLed",
+    "11": "DUT_GND"
+  },
+  "macros": [
+    {
+      "name": "Power DUT",
+      "color": "#43a047",
+      "actions": [
+        {
+          "cmd": "ch.limits",
+          "ch": 9,
+          "vmax": 15.0,
+          "imax": 1.0
+        },
+        {
+          "cmd": "ch.limits",
+          "ch": 10,
+          "vmax": 15.0,
+          "imax": 1.0
+        },
+        {
+          "cmd": "ch.connect",
+          "ch": 9
+        },
+        {
+          "cmd": "ch.connect",
+          "ch": 10
+        },
+        {
+          "cmd": "ch.connect",
+          "ch": 11
+        },
+        {
+          "cmd": "wait",
+          "ms": 300
+        }
+      ]
+    },
+    {
+      "name": "Safe state",
+      "color": "#1e88e5",
+      "actions": [
+        {
+          "cmd": "ch.set",
+          "ch": 1,
+          "mode": "VS",
+          "v": 5.0
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 2,
+          "mode": "VS",
+          "v": 0.8
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 3,
+          "mode": "VS",
+          "v": 5.0
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 4,
+          "mode": "VS",
+          "v": 5.0
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 5,
+          "mode": "VS",
+          "v": 5.0
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 6,
+          "mode": "VS",
+          "v": 0.8
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 7,
+          "mode": "VS",
+          "v": 0.8
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 8,
+          "mode": "VS",
+          "v": 5.0
+        }
+      ]
+    },
+    {
+      "name": "HV present",
+      "color": "#fb8c00",
+      "actions": [
+        {
+          "cmd": "ch.set",
+          "ch": 1,
+          "mode": "VS",
+          "v": 0.8
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 2,
+          "mode": "VS",
+          "v": 0.8
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 3,
+          "mode": "VS",
+          "v": 5.0
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 4,
+          "mode": "VS",
+          "v": 5.0
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 5,
+          "mode": "VS",
+          "v": 5.0
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 6,
+          "mode": "VS",
+          "v": 0.8
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 7,
+          "mode": "VS",
+          "v": 0.8
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 8,
+          "mode": "VS",
+          "v": 5.0
+        }
+      ]
+    },
+    {
+      "name": "Release all",
+      "color": "#546e7a",
+      "actions": [
+        {
+          "cmd": "ch.set",
+          "ch": 1,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 2,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 3,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 4,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 5,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 6,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 7,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 8,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.disconnect",
+          "ch": 11
+        },
+        {
+          "cmd": "ch.disconnect",
+          "ch": 9
+        },
+        {
+          "cmd": "ch.disconnect",
+          "ch": 10
+        }
+      ]
+    },
+    {
+      "name": "Captured state",
+      "color": "#546e7a",
+      "actions": [
+        {
+          "cmd": "ch.set",
+          "ch": 1,
+          "mode": "VS",
+          "v": 6.66
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 2,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 3,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 4,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 5,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 6,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 7,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.set",
+          "ch": 8,
+          "mode": "HZ"
+        },
+        {
+          "cmd": "ch.disconnect",
+          "ch": 9
+        },
+        {
+          "cmd": "ch.disconnect",
+          "ch": 10
+        },
+        {
+          "cmd": "ch.disconnect",
+          "ch": 11
+        }
+      ]
+    }
+  ],
+  "indicators": [
+    {
+      "name": "Green LED",
+      "states": [
+        {
+          "state": "ON",
+          "color": "#43a047",
+          "when": [
+            {
+              "ch": 9,
+              "field": "vout",
+              "op": "<",
+              "value": 2.0
+            },
+            {
+              "ch": 9,
+              "field": "conn",
+              "op": "==",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "state": "OFF",
+          "color": "#546e7a",
+          "when": [
+            {
+              "ch": 9,
+              "field": "vout",
+              "op": ">",
+              "value": 10.0
+            }
+          ]
+        }
+      ],
+      "fallback": {
+        "state": "?",
+        "color": "#fb8c00"
+      }
+    },
+    {
+      "name": "Red LED",
+      "states": [
+        {
+          "state": "ON",
+          "color": "#e53935",
+          "when": [
+            {
+              "ch": 10,
+              "field": "vout",
+              "op": "<",
+              "value": 2.0
+            },
+            {
+              "ch": 10,
+              "field": "conn",
+              "op": "==",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "state": "OFF",
+          "color": "#546e7a",
+          "when": [
+            {
+              "ch": 10,
+              "field": "vout",
+              "op": ">",
+              "value": 10.0
+            }
+          ]
+        }
+      ],
+      "fallback": {
+        "state": "?",
+        "color": "#fb8c00"
+      }
+    },
+    {
+      "name": "DUT power",
+      "states": [
+        {
+          "state": "POWERED",
+          "color": "#43a047",
+          "when": [
+            {
+              "ch": 11,
+              "field": "conn",
+              "op": "==",
+              "value": 1
+            },
+            {
+              "ch": 9,
+              "field": "conn",
+              "op": "==",
+              "value": 1
+            },
+            {
+              "ch": 10,
+              "field": "conn",
+              "op": "==",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "fallback": {
+        "state": "OFF",
+        "color": "#546e7a"
+      }
+    },
+    {
+      "name": "aaa",
+      "states": [],
+      "fallback": {
+        "state": "\u2014",
+        "color": "#8e24aa"
+      }
+    }
+  ]
+}

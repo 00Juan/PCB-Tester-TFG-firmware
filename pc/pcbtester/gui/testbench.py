@@ -153,12 +153,15 @@ class MaskEdit(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        from .profile import signal_label
+
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(4)
         self.checks = []
         for i in range(8):
             cb = QCheckBox(str(i + 1))
+            cb.setToolTip(signal_label(i + 1))
             self.checks.append(cb)
             lay.addWidget(cb)
         lay.addStretch(1)

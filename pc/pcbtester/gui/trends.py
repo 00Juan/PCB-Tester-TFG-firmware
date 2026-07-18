@@ -124,6 +124,13 @@ class TrendsTab(QWidget):
 
     # ------------------------------------------------------------------ #
 
+    def set_signal_names(self, names: dict) -> None:
+        """Show the DUT profile's signal names as checkbox tooltips."""
+        for i, cb in enumerate(self.lvlp_checks):
+            cb.setToolTip(names.get(i + 1, ""))
+        for i, cb in enumerate(self.aux_checks):
+            cb.setToolTip(names.get(9 + i, ""))
+
     def clear(self) -> None:
         for s in self.lvlp_v + self.lvlp_i + self.aux_series:
             s.t.clear()

@@ -57,24 +57,41 @@ def main(argv=None) -> int:
             win.tb_tab._refresh_list()
             win.tb_tab._run()
 
+        def run_operate() -> None:
+            from .operate import PROFILE_DIR
+
+            win.operate_tab.load_profile_file(str(PROFILE_DIR / "TSAL.json"))
+            win.operate_tab.run_macro_named("Power DUT")
+
         def check() -> None:
             x = win.scope_tab.curve.xData  # numpy array or None
             scope_pts = 0 if x is None else len(x)
             tb_rows = win.tb_tab.results.rowCount()
             tb_done = win.tb_tab._done_summary or {}
+            power_lamp = next(
+                (w for w in win.operate_tab.ind_widgets
+                 if w.indicator.get("name") == "DUT power"), None)
+            op_ok = (win.operate_tab.macro_ok_count >= 1
+                     and power_lamp is not None
+                     and "POWERED" in power_lamp.state_label.text()
+                     and "HV_Accu_State" in win.lvlp_cards[0].title_label.text()
+                     and win.operate_tab.table.item(0, 2).text() != "")
             ok = (win.client is not None and win.telem_count >= 3
                   and win.trends_tab.sample_count >= 3 and scope_pts == 32
-                  and tb_rows == 2 and tb_done.get("pass") == 2)
+                  and tb_rows == 2 and tb_done.get("pass") == 2 and op_ok)
             print("SELFTEST OK" if ok else
                   f"SELFTEST FAIL (client={win.client is not None}, "
                   f"telem_count={win.telem_count}, "
                   f"trends={win.trends_tab.sample_count}, scope={scope_pts}, "
-                  f"tb_rows={tb_rows}, tb_done={tb_done})")
+                  f"tb_rows={tb_rows}, tb_done={tb_done}, "
+                  f"macro_ok={win.operate_tab.macro_ok_count}, "
+                  f"lamp={power_lamp.state_label.text() if power_lamp else None})")
             app.exit(0 if ok else 1)
 
         QTimer.singleShot(500, request_scope)
         QTimer.singleShot(900, run_campaign)
-        QTimer.singleShot(3200, check)
+        QTimer.singleShot(1700, run_operate)
+        QTimer.singleShot(3400, check)
     elif args.mock:
         win.mock_check.setChecked(True)
         win._connect(mock=True)

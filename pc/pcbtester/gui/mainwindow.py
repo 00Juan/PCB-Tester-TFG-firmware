@@ -17,6 +17,7 @@ from ..client import CommandError, PCBTesterClient, ProtocolTimeout
 from .bridge import ClientBridge
 from .calibration import CalibrationTab
 from .cards import HpCard, HvCard, LimitsDialog, LvlpCard
+from .operate import OperateTab
 from .scope import ScopeTab
 from .testbench import TestbenchTab
 from .trends import TrendsTab
@@ -58,6 +59,10 @@ class MainWindow(QMainWindow):
         self.scope_tab = ScopeTab(request_capture=self._request_capture)
         self.bridge.capture.connect(self.scope_tab.on_capture)
         self.cal_tab = CalibrationTab(get_client=lambda: self.client)
+        self.operate_tab = OperateTab(
+            get_client=lambda: self.client,
+            report_error=lambda m: self.statusBar().showMessage(m, 6000))
+        self.operate_tab.names_changed.connect(self._on_signal_names)
         self.tb_tab = TestbenchTab(
             get_client=lambda: self.client,
             report_error=lambda m: self.statusBar().showMessage(m, 6000))
@@ -67,6 +72,7 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
         self.tabs.addTab(dashboard, "Dashboard")
+        self.tabs.addTab(self.operate_tab, "Operate")
         self.tabs.addTab(self.tb_tab, "Testbench")
         self.tabs.addTab(self.trends_tab, "Trends")
         self.tabs.addTab(self.scope_tab, "Scope")
@@ -311,6 +317,7 @@ class MainWindow(QMainWindow):
         self._last_telem = time.monotonic()
         self.telem_count += 1
         self.trends_tab.add_telemetry(msg)
+        self.operate_tab.update_telemetry(msg)
         for d in msg.get("lvlp", []):
             idx = d.get("ch", 0) - 1
             if 0 <= idx < N_LVLP:
@@ -340,6 +347,15 @@ class MainWindow(QMainWindow):
     def _on_log(self, msg: dict) -> None:
         self.statusBar().showMessage(
             f"[{msg.get('lvl', 'info')}] {msg.get('msg', '')}", 5000)
+
+    def _on_signal_names(self, names: dict) -> None:
+        """DUT profile (re)named the channels — propagate across the app."""
+        for i, card in enumerate(self.lvlp_cards):
+            card.set_signal_name(names.get(i + 1))
+        for i, card in enumerate(self.hp_cards):
+            card.set_signal_name(names.get(FIRST_HP_CH + i))
+        self.hv_card.set_signal_name(names.get(HV_CH))
+        self.trends_tab.set_signal_names(names)
 
     # ------------------------------------------------------------------ #
     # Banner
