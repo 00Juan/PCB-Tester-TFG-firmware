@@ -5,3 +5,10 @@
 .vscode/ipch
 lib/.DS_Store
 .DS_Store
+
+# Python virtual environments
+.venv/
+pc/.venv/
+venv/
+__pycache__/
+*.pyc
