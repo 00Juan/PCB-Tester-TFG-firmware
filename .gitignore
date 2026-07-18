@@ -12,3 +12,15 @@ pc/.venv/
 venv/
 __pycache__/
 *.pyc
+
+# Python build / packaging artifacts
+*.egg-info/
+build/
+dist/
+.eggs/
+*.egg
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

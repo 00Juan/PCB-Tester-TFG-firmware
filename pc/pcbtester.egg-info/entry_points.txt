@@ -1,3 +1,0 @@
-[console_scripts]
-pcbtester-gui = pcbtester.gui.app:main
-pcbtester-repl = pcbtester.cli:main
