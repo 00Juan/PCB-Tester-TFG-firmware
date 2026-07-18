@@ -21,8 +21,8 @@
  *     5 V = closed, 0.8 V = open. SCS: < 217 mV = short-to-GND / open circuit.
  * - HV_Accu_State: 5 V = no HV present, 0.8 V = HV present. Also SCS.
  * - AIR+_Coil / AIR-_Coil / Precharge_Coil (intended relay state):
- *     5 V = open, 0 V = closed.
- * - SDC_END: 5 V = shutdown circuit open, 0 V = closed.
+ *     12 V = open, 0 V = closed.
+ * - SDC_END: 0 V = shutdown circuit open, 12 V = closed.
  *
  * Channel Mapping (LVLP CH1-CH8 drive the DUT inputs):
  * - CH1: HV_Accu_State
@@ -39,11 +39,12 @@
  *   LV supply is external and always present; CH11 is closed once at the
  *   start of the campaign to power the DUT and opened at the end.
  *
- * LED sensing: GreenLed/RedLed are open-drain outputs. On the PCBT both are
- * pulled to a fixed 12 V rail through the HP channels (PMOS must conduct),
- * so with the HP channel connected:
- *   LED ON  -> output pulls the line low  -> VOut ~ 0 V
- *   LED OFF -> output in high impedance   -> VOut ~ 12 V
+ * LED sensing (with the HP channel connected):
+ *   GreenLed (CH9): active-high level -> VOut ~ 1.5 V when ON, ~ 0 V when OFF.
+ *   RedLed (CH10): open-drain output pulled to a fixed 12 V rail through the
+ *     HP channel (PMOS must conduct) -> LED ON pulls the line low (~0 V),
+ *     LED OFF is high impedance (~12 V). Red is never energized in this
+ *     bench, so it must read ~12 V (OFF) in every test.
  *
  * Test Strategy:
  * - `dutSetup` callbacks drive the 8 LVLP inputs; every scenario starts from
@@ -80,16 +81,22 @@ static constexpr float AUX2_CLOSED_V       = 5.0f; // physical relay closed
 static constexpr float AUX2_OPEN_V         = 0.8f; // physical relay open
 static constexpr float HV_ACCU_NO_HV_V     = 5.0f; // no HV in accumulator
 static constexpr float HV_ACCU_HV_PRES_V   = 0.8f; // HV present
-static constexpr float COIL_OPEN_V         = 5.0f; // intended state: open
-static constexpr float COIL_CLOSED_V       = 0.0f; // intended state: closed
-static constexpr float SDC_OPEN_V          = 5.0f; // shutdown circuit open
-static constexpr float SDC_CLOSED_V        = 0.0f; // shutdown circuit closed
+static constexpr float COIL_OPEN_V         = 12.0f; // intended state: open
+static constexpr float COIL_CLOSED_V       = 0.0f;  // intended state: closed
+static constexpr float SDC_OPEN_V          = 0.0f;  // shutdown circuit open
+static constexpr float SDC_CLOSED_V        = 12.0f; // shutdown circuit closed
 static constexpr float SCS_SHORT_GND_V     = 0.0f; // < 217 mV -> SCS_Failure
 
-// LED lines on the HP channels (open-drain outputs pulled to 12 V)
-static constexpr float LED_ON_V   = 0.0f;  // DUT pulls the line low
-static constexpr float LED_OFF_V  = 12.0f; // line at the PCBT 12 V rail
-static constexpr float LED_TOL_V  = 2.0f;
+// GreenLed (CH9) sensed as an active-high level: ~1.5 V when ON, ~0 V when OFF.
+static constexpr float GREEN_ON_V  = 1.5f; // GreenLed ON
+static constexpr float GREEN_OFF_V = 0.0f; // GreenLed OFF
+// RedLed (CH10) open-drain output pulled to the fixed 12 V rail: never
+// energized in this bench, so it must read ~12 V (OFF) in every test.
+static constexpr float RED_OFF_V   = 12.0f;
+// Green ON=1.5 V / OFF=0 V are only 1.5 V apart, so use a tight tolerance
+// (bands [0.8, 2.2] vs [-0.7, 0.7] do not overlap). Red keeps the wide one.
+static constexpr float GREEN_TOL_V = 0.7f;
+static constexpr float RED_TOL_V   = 2.0f;
 
 static constexpr uint8_t MASK_HP_GREEN = 0x01; // HPCH1 = CH9 (GreenLed)
 static constexpr uint8_t MASK_HP_RED   = 0x02; // HPCH2 = CH10 (RedLed)
@@ -331,9 +338,10 @@ static void addLedTest(const char *name, DUTSetupFn setupFn, uint8_t hpMask,
   tc.name = name;
   tc.type = TEST_STATIC_VOLTAGE;
   tc.dutSetup = setupFn;
+  const float toleranceV = (hpMask == MASK_HP_GREEN) ? GREEN_TOL_V : RED_TOL_V;
   tc.staticVoltage = {.senseChannelMask = 0,
                       .expectedVoltage = expectedV,
-                      .toleranceVolts = LED_TOL_V,
+                      .toleranceVolts = toleranceV,
                       .settleMs = 300,
                       .senseHPChannelMask = hpMask};
   runner.addTest(tc);
@@ -344,78 +352,78 @@ static void configureTests() {
   // 1-2: Safe state -> TS_is_OFF=1, Safe_State=1 -> green ON, red OFF
   // -----------------------------------------------------------------------
   addLedTest("Safe: TS_is_OFF=1 Green ON", setupSafeState, MASK_HP_GREEN,
-             LED_ON_V);
-  addLedTest("Safe: Red_On=0 Red OFF", setupSafeState, MASK_HP_RED, LED_OFF_V);
+             GREEN_ON_V);
+  addLedTest("Safe: Red_On=0 Red OFF", setupSafeState, MASK_HP_RED, RED_OFF_V);
 
   // -----------------------------------------------------------------------
   // 3-6: TS state violations -> TS_is_OFF=0 -> green OFF
   // -----------------------------------------------------------------------
   addLedTest("HV pres: TS_is_OFF=0 Grn OFF", setupHVPresent, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
   addLedTest("AIR+ cls: TS_is_OFF=0 GrnOFF", setupAirPClosed, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
   addLedTest("AIR- cls: TS_is_OFF=0 GrnOFF", setupAirMClosed, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
   addLedTest("PRE cls: TS_is_OFF=0 Grn OFF", setupPreClosed, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
 
   // -----------------------------------------------------------------------
   // 7-9: Stuck relays (EV4.10.13) -> Safe_State=0 -> green OFF
   // -----------------------------------------------------------------------
   addLedTest("AIR+_Stuck=1 Green OFF", setupStuckAirP, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
   addLedTest("AIR-_Stuck=1 Green OFF", setupStuckAirM, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
   addLedTest("PRECHARGE_Stuck=1 Green OFF", setupStuckPre, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
 
   // -----------------------------------------------------------------------
   // 10-12: RelayClosed_but_No_Voltage (EV4.10.14) -> green OFF
   // -----------------------------------------------------------------------
   addLedTest("RlyClsdNoVolt AIR+ Grn OFF", setupRlyClosedNoVoltAirP,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
   addLedTest("RlyClsdNoVolt AIR- Grn OFF", setupRlyClosedNoVoltAirM,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
   addLedTest("RlyClsdNoVolt PRE Grn OFF", setupRlyClosedNoVoltPre,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
 
   // -----------------------------------------------------------------------
   // 13-16: SCS_Failure, short to GND (T11.9.2) -> green OFF
   // -----------------------------------------------------------------------
   addLedTest("SCS AIR+AUX2 gnd: Green OFF", setupScsShortAirPAux2,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
   addLedTest("SCS AIR-AUX2 gnd: Green OFF", setupScsShortAirMAux2,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
   addLedTest("SCS PREAUX2 gnd: Green OFF", setupScsShortPreAux2,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
   addLedTest("SCS HVAccu gnd: Green OFF", setupScsShortHvAccu, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
 
   // -----------------------------------------------------------------------
   // 17-20: SCS_Failure, open circuit (T11.9.2) -> green OFF
   // -----------------------------------------------------------------------
   addLedTest("SCS AIR+AUX2 open: Grn OFF", setupScsOpenAirPAux2,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
   addLedTest("SCS AIR-AUX2 open: Grn OFF", setupScsOpenAirMAux2,
-             MASK_HP_GREEN, LED_OFF_V);
+             MASK_HP_GREEN, GREEN_OFF_V);
   addLedTest("SCS PREAUX2 open: Grn OFF", setupScsOpenPreAux2, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
   addLedTest("SCS HVAccu open: Grn OFF", setupScsOpenHvAccu, MASK_HP_GREEN,
-             LED_OFF_V);
+             GREEN_OFF_V);
 
   // -----------------------------------------------------------------------
   // 21: No latching -> green LED auto-recovers when implausibility clears
   // -----------------------------------------------------------------------
   addLedTest("Implaus clear: Green auto-ON", setupImplausAutoRecovery,
-             MASK_HP_GREEN, LED_ON_V);
+             MASK_HP_GREEN, GREEN_ON_V);
 
   // -----------------------------------------------------------------------
   // 22-23: Red_Circuit independence (no HV connected -> red always OFF)
   // -----------------------------------------------------------------------
   addLedTest("Implaus: Red_On=0 Red OFF", setupStuckAirP, MASK_HP_RED,
-             LED_OFF_V);
+             RED_OFF_V);
   addLedTest("TS inputs ON: Red OFF", setupTsActiveInputs, MASK_HP_RED,
-             LED_OFF_V);
+             RED_OFF_V);
 }
 
 // ============================================================================

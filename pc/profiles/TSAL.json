@@ -2,7 +2,7 @@
   "format": "pcbtester-dut-profile",
   "version": 1,
   "name": "TSAL",
-  "description": "TSAL DUT profile. Wiring as in campaigns/TSAL.json: LVLP CH1-8 drive the control-loop signals, CH9/CH10 (HP) are the open-drain LED pull-ups vs the 12V rail (LED ON = ~0V at the pin, OFF = ~12V), CH11 (HV relay) switches the DUT GND return. LV supply is external. Signal levels (src/test_TSAL.cpp): AUX2 mechanical state 5V=closed / 0.8V=open; Coil intended state 0V=closed / 5V=open; SDC_END 0V=closed / 5V=open; HV_Accu_State 5V=no HV / 0.8V=HV present.",
+  "description": "TSAL DUT profile. Wiring as in campaigns/TSAL.json: LVLP CH1-8 drive the control-loop signals, CH9 (GreenLed, HP) senses an active-high level (ON = ~1.5V, OFF = ~0V); CH10 (RedLed, HP) is the open-drain pull-up vs the 12V rail (LED ON = ~0V, OFF = ~12V), CH11 (HV relay) switches the DUT GND return. LV supply is external. Signal levels (src/test_TSAL.cpp): AUX2 mechanical state 5V=closed / 0.8V=open; Coil intended state 0V=closed / 12V=open; SDC_END 12V=closed / 0V=open; HV_Accu_State 5V=no HV / 0.8V=HV present.",
   "channels": {
     "1": "HV_Accu_State",
     "2": "AIR-_AUX2",
@@ -137,12 +137,12 @@
     {
       "name": "SDC closed",
       "color": "#fb8c00",
-      "actions": [{"cmd": "ch.set", "ch": 4, "mode": "VS", "v": 0.0}]
+      "actions": [{"cmd": "ch.set", "ch": 4, "mode": "VS", "v": 12.0}]
     },
     {
       "name": "SDC open",
       "color": "#546e7a",
-      "actions": [{"cmd": "ch.set", "ch": 4, "mode": "VS", "v": 12.0}]
+      "actions": [{"cmd": "ch.set", "ch": 4, "mode": "VS", "v": 0.0}]
     }
   ],
   "indicators": [
@@ -150,10 +150,10 @@
       "name": "Green LED",
       "states": [
         {"state": "ON", "color": "#43a047",
-         "when": [{"ch": 9, "field": "vout", "op": "<", "value": 2.0},
+         "when": [{"ch": 9, "field": "vout", "op": ">", "value": 0.75},
                   {"ch": 9, "field": "conn", "op": "==", "value": 1}]},
         {"state": "OFF", "color": "#546e7a",
-         "when": [{"ch": 9, "field": "vout", "op": ">", "value": 10.0}]}
+         "when": [{"ch": 9, "field": "vout", "op": "<", "value": 0.75}]}
       ],
       "fallback": {"state": "?", "color": "#fb8c00"}
     },

@@ -84,7 +84,9 @@ class ActionEditorDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Edit action")
         self.setMinimumWidth(420)
-        self.result_action: Optional[dict] = None
+        # dict for one action, or a list when a target expands to several
+        # (e.g. "All LVLP" limits -> one ch.limits per channel).
+        self.result_action: Optional[object] = None
 
         self.type_combo = QComboBox()
         self.type_combo.addItems(self.TYPES)
@@ -136,6 +138,9 @@ class ActionEditorDialog(QDialog):
         lim_page = QWidget()
         form = QFormLayout(lim_page)
         self.lim_ch = _channel_combo(range(1, N_CHANNELS + 1))
+        # Broadcast target: apply the same limits to every LVLP channel (CH1-8)
+        # at once. Expanded into one ch.limits action per channel on accept.
+        self.lim_ch.addItem("All LVLP (CH1-8)", userData="all")
         self.lim_vmax = QDoubleSpinBox(suffix=" V", decimals=2, maximum=500.0,
                                        value=12.0)
         self.lim_imax = QDoubleSpinBox(suffix=" A", decimals=3, maximum=10.0,
@@ -235,9 +240,13 @@ class ActionEditorDialog(QDialog):
         if page == 2:
             return {"cmd": "wait", "ms": self.wait_ms.value()}
         if page == 3:
-            return {"cmd": "ch.limits", "ch": self.lim_ch.currentData(),
-                    "vmax": self.lim_vmax.value(),
-                    "imax": self.lim_imax.value()}
+            vmax, imax = self.lim_vmax.value(), self.lim_imax.value()
+            target = self.lim_ch.currentData()
+            if target == "all":
+                return [{"cmd": "ch.limits", "ch": ch, "vmax": vmax,
+                         "imax": imax} for ch in range(1, 9)]
+            return {"cmd": "ch.limits", "ch": target,
+                    "vmax": vmax, "imax": imax}
         a = json.loads(self.raw_edit.toPlainText())
         if not isinstance(a, dict) or "cmd" not in a:
             raise ValueError('action must be a JSON object with a "cmd" key')
@@ -304,7 +313,9 @@ class MacroEditorDialog(QDialog):
     def _add(self) -> None:
         dlg = ActionEditorDialog(self)
         if dlg.exec() == QDialog.Accepted and dlg.result_action:
-            self.actions.append(dlg.result_action)
+            result = dlg.result_action
+            self.actions.extend(result if isinstance(result, list)
+                                else [result])
             self._refresh()
 
     def _edit(self) -> None:
@@ -313,7 +324,11 @@ class MacroEditorDialog(QDialog):
             return
         dlg = ActionEditorDialog(self, action=self.actions[i])
         if dlg.exec() == QDialog.Accepted and dlg.result_action:
-            self.actions[i] = dlg.result_action
+            result = dlg.result_action
+            # A single action may expand into several (e.g. "All LVLP"); splice
+            # them in place of the one being edited.
+            self.actions[i:i + 1] = (result if isinstance(result, list)
+                                     else [result])
             self._refresh()
             self.action_list.setCurrentRow(i)
 
