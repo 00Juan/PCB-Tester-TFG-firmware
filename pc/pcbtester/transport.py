@@ -32,6 +32,15 @@ class SerialTransport(Transport):
 
     The ESP32-S3 native USB-CDC ignores the baud rate; 115200 is passed for
     compatibility with UART-bridge setups.
+
+    Note: the ESP32-S3 talks over its built-in USB-Serial-JTAG peripheral
+    (VID:PID 303a:1001). A close/reopen cycle makes the USB host issue a bus
+    reset which, on the device's arduino-esp32 core, used to mask the CDC RX
+    interrupt and stop the firmware from receiving commands ("no ack for
+    'hello'"). That is fixed on the firmware side (keepRxInterruptArmed in
+    src/app.cpp), so the host just opens the port normally here. We keep the
+    default DTR/RTS handling, which leaves the running app untouched (it does
+    not reset the chip), so reconnecting preserves device state.
     """
 
     def __init__(self, port: str, baudrate: int = 115200, timeout: float = 0.2):
@@ -75,11 +84,17 @@ def find_tester(timeout: float = 1.5) -> Optional[str]:
         except Exception:
             continue
         try:
-            t.write(b'{"id":0,"cmd":"hello"}\n')
             import time
 
+            # Resend hello periodically: (re)opening the port bus-resets the
+            # ESP32-S3 USB-CDC and the first hello can land while its RX is
+            # briefly masked (the firmware re-arms it within ~100 ms).
             deadline = time.monotonic() + timeout
+            next_hello = 0.0
             while time.monotonic() < deadline:
+                if time.monotonic() >= next_hello:
+                    t.write(b'{"id":0,"cmd":"hello"}\n')
+                    next_hello = time.monotonic() + 0.5
                 line = t.readline()
                 if not line:
                     continue

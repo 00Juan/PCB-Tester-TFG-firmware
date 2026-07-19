@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
 
             self.client = PCBTesterClient(transport).start()
             self.bridge.attach(self.client)
-            info = self.client.hello(timeout=3.0)
+            info = self.client.handshake()
             self.client.set_telemetry_rate(self.rate_spin.value())
         except Exception as e:
             self._teardown_client()
