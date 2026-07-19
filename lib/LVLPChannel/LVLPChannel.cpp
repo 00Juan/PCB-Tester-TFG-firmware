@@ -5,6 +5,9 @@
 const float DAC_SUPPLY_VOLTAGE = 4.967;
 const float vespVoltage = 3.269;
 
+// Over-current debounce window (ms), shared by all channels. See the header.
+uint32_t LVLPChannel::overCurrentDebounceMs = 2;
+
 LVLPChannel::LVLPChannel(uint8_t chIndex, MCP3208 *adcPtr,
                          MCP3208::Channel adcCh, Adafruit_MCP4728 *dacPtr,
                          MCP4728_channel_t dacCh,
@@ -57,18 +60,43 @@ void LVLPChannel::checkLimits() {
     // setMode is safe here: channelStatus is still STATUS_NORMAL at this point,
     // so the guard in setMode() allows MODE_HIGH_IMPEDANCE.
     // This opens the relay AND drives the PWM pin LOW (for CH1-CH4).
+    // Voltage settles in <1 ms, so an over-voltage reading is trustworthy
+    // immediately — no debounce needed here.
     setMode(MODE_HIGH_IMPEDANCE);
     channelStatus = STATUS_FAIL_OVERVOLTAGE;
+    overCurrentActive = false;
     if (led) {
       *led = CRGB::Blue;
       FastLED.show();
     }
+    return;
+  }
 
-  } else if (abs(channelCurrentOut) > maxCurrentLimit) {
-    // Do not trip in high-impedance mode (ADC noise can cause false readings).
-    if (channelMode == MODE_HIGH_IMPEDANCE) return;
+  // Over-current condition. Do not trip in high-impedance mode (the output is
+  // disconnected, so ADC noise can otherwise cause false readings).
+  bool overCurrent = (channelMode != MODE_HIGH_IMPEDANCE) &&
+                     (fabsf(channelCurrentOut) > maxCurrentLimit);
+
+  if (!overCurrent) {
+    // Condition absent (or cleared) -> reset the debounce timer.
+    overCurrentActive = false;
+    return;
+  }
+
+  // Time-based debounce: only trip once the over-current has persisted
+  // continuously for overCurrentDebounceMs. A momentary inrush/settling
+  // spike clears before the timer elapses; a genuine fault does not.
+  uint32_t now = millis();
+  if (!overCurrentActive) {
+    overCurrentActive = true;
+    overCurrentSinceMs = now; // start of a new over-current episode
+    return;
+  }
+
+  if (now - overCurrentSinceMs >= overCurrentDebounceMs) {
     setMode(MODE_HIGH_IMPEDANCE);
     channelStatus = STATUS_FAIL_OVERCURRENT;
+    overCurrentActive = false;
     if (led) {
       *led = CRGB::Red;
       FastLED.show();
@@ -264,7 +292,6 @@ uint16_t LVLPChannel::readMCP3208Value() {
 }
 
 float LVLPChannel::readCurrent() {
-  delay(1);
   float voutActual = readVoltage();
   // V_before_shunt is roughly what we command the DAC to generate
   float vBeforeShunt =
@@ -298,8 +325,9 @@ void LVLPChannel::update() {
 
   if (channelMode == MODE_CURRENT_SOURCE ||
       channelMode == MODE_RESISTIVE_LOAD) {
-    float actualCurrent = readCurrent();
-    
+    // Reuse the reading already taken above this cycle (no extra SPI traffic).
+    float actualCurrent = channelCurrentOut;
+
     uint32_t now = millis();
     float dt = (now - pidLastTime) / 1000.0f; // time in seconds
     if (dt <= 0.0f) dt = 0.001f;
@@ -331,6 +359,15 @@ void LVLPChannel::update() {
     pidPrevError = error;
     pidLastTime = now;
   }
+}
+
+bool LVLPChannel::monitorFault() {
+  // Same measurement + limit check as update() but without the regulation
+  // loop, so calling this repeatedly during a test never moves the output.
+  channelVoltageOut = readVoltage();
+  channelCurrentOut = readCurrent();
+  checkLimits();
+  return channelStatus != STATUS_NORMAL;
 }
 
 void LVLPChannel::printDebugInfo() const {

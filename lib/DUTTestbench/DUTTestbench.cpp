@@ -56,6 +56,10 @@ void DUTTestRunner::runAll(U8G2* display) {
     running_ = true;
     aborted_ = false;
     abortRequested_ = false;
+    faultStop_ = false;
+    faultCh_ = -1;
+    allowChannelFaults_ = false;
+    lastFaultPollMs_ = millis();
     curTotal_ = testCount_;
 
     Serial.println(F("\n========================================"));
@@ -95,8 +99,9 @@ void DUTTestRunner::runAll(U8G2* display) {
 
         results_[i] = runOne(i); // safetyDisconnectAll + dutSetup handled inside
         if (resultCb_) resultCb_(i, results_[i]);
-        if (abortRequested_) {
-            aborted_ = true;
+        if (stopRequested()) {
+            if (abortRequested_) aborted_ = true;
+            const char* reason = faultStop_ ? "channel fault" : "campaign aborted";
             // Mark remaining tests as skipped so the report stays consistent
             for (uint8_t k = i + 1; k < testCount_; k++) {
                 results_[k].testName = tests_[k].name;
@@ -105,7 +110,7 @@ void DUTTestRunner::runAll(U8G2* display) {
                 results_[k].expectedValue = 0.0f;
                 results_[k].elapsedMs = 0;
                 snprintf(results_[k].details, sizeof(results_[k].details),
-                         "skipped (campaign aborted)");
+                         "skipped (%s)", reason);
             }
             break;
         }
@@ -132,6 +137,10 @@ TestResult DUTTestRunner::runOne(uint8_t index) {
     const TestCase& tc = tests_[index];
     Serial.printf("[%u/%u] Running: %s\n", index + 1, testCount_, tc.name);
 
+    // The short-circuit protection test deliberately drives a channel into
+    // over-current, so the global stop-on-fault guard must not fire during it.
+    allowChannelFaults_ = (tc.type == TEST_SHORT_CIRCUIT_PROTECTION);
+
     // --- Lifecycle: clean slate -> DUT sim setup -> run test ---
     safetyDisconnectAll();
     if (tc.dutSetup) {
@@ -141,7 +150,8 @@ TestResult DUTTestRunner::runOne(uint8_t index) {
     applySetupSteps(tc);
 
     TestResult result;
-    if (abortRequested_) {
+    if (stopRequested()) {
+        allowChannelFaults_ = false;
         fillAbortedResult(result, tc.name);
         return result;
     }
@@ -167,7 +177,8 @@ TestResult DUTTestRunner::runOne(uint8_t index) {
             break;
     }
 
-    if (abortRequested_) {
+    allowChannelFaults_ = false;
+    if (stopRequested()) {
         fillAbortedResult(result, tc.name);
     }
 
@@ -348,7 +359,7 @@ TestResult DUTTestRunner::runVoltageRippleTest(const TestCase& tc) {
             if (v < vmin) vmin = v;
             if (v > vmax) vmax = v;
             interruptibleDelay(intervalMs);
-            if (abortRequested_) break;
+            if (stopRequested()) break;
         }
 
         float ptP = vmax - vmin;
@@ -489,7 +500,7 @@ TestResult DUTTestRunner::runCurrentInrushTest(const TestCase& tc) {
         }
         sampleCount++;
         interruptibleDelay(sampleInterval);
-        if (abortRequested_) break;
+        if (stopRequested()) break;
     }
 
     r.elapsedMs = (uint32_t)(millis() - t0);
@@ -1103,7 +1114,7 @@ void DUTTestRunner::updateRealtimeDisplay(const char* testName, uint32_t elapsed
 
 void DUTTestRunner::waitAndDisplay(uint32_t waitMs, const char* testName) {
     uint32_t start = millis();
-    while (millis() - start < waitMs && !abortRequested_) {
+    while (millis() - start < waitMs && !stopRequested()) {
         updateRealtimeDisplay(testName, millis() - start, waitMs);
         serviceAndCheckAbort();
         delay(10);
@@ -1117,6 +1128,7 @@ void DUTTestRunner::waitAndDisplay(uint32_t waitMs, const char* testName) {
 
 bool DUTTestRunner::serviceAndCheckAbort() {
     if (commsHook_) commsHook_();
+    pollChannelFaults();
     if (running_ && progressCb_) {
         uint32_t now = millis();
         if (now - lastProgressMs_ >= 500) {
@@ -1124,12 +1136,30 @@ bool DUTTestRunner::serviceAndCheckAbort() {
             progressCb_(curIdx_, curTotal_, tests_[curIdx_].name, now - curT0_);
         }
     }
-    return abortRequested_;
+    return stopRequested();
+}
+
+void DUTTestRunner::pollChannelFaults() {
+    // Keep over-current / over-voltage protection alive during the blocking
+    // campaign run: the main app loop (which normally drives update()) is
+    // suspended, so we refresh each channel's fault state here. Throttled so
+    // the extra ADC traffic does not disturb timing-sensitive tests.
+    if (!stopOnFault_ || allowChannelFaults_ || faultStop_) return;
+    uint32_t now = millis();
+    if (now - lastFaultPollMs_ < FAULT_POLL_MS) return;
+    lastFaultPollMs_ = now;
+    for (uint8_t i = 0; i < chCount_; i++) {
+        if (ch_[i] && ch_[i]->monitorFault()) {
+            faultStop_ = true;
+            faultCh_ = (int8_t)i;
+            return;
+        }
+    }
 }
 
 void DUTTestRunner::interruptibleDelay(uint32_t ms) {
     uint32_t start = millis();
-    while (millis() - start < ms && !abortRequested_) {
+    while (millis() - start < ms && !stopRequested()) {
         serviceAndCheckAbort();
         uint32_t remaining = ms - (millis() - start);
         delay(remaining < 10 ? remaining : 10);
@@ -1142,12 +1172,17 @@ void DUTTestRunner::fillAbortedResult(TestResult& r, const char* name) {
     r.measuredValue = 0.0f;
     r.expectedValue = 0.0f;
     r.elapsedMs = (uint32_t)(millis() - curT0_);
-    snprintf(r.details, sizeof(r.details), "aborted");
+    if (faultStop_) {
+        snprintf(r.details, sizeof(r.details),
+                 "stopped: CH%d fault (over-current/over-voltage)", faultCh_ + 1);
+    } else {
+        snprintf(r.details, sizeof(r.details), "aborted");
+    }
 }
 
 void DUTTestRunner::applySetupSteps(const TestCase& tc) {
     for (uint8_t s = 0; s < tc.setupCount && s < DUT_MAX_SETUP_STEPS; s++) {
-        if (abortRequested_) return;
+        if (stopRequested()) return;
         const SetupStep& st = tc.setup[s];
         const bool chValid = st.ch >= 1 && st.ch <= chCount_;
         switch (st.kind) {

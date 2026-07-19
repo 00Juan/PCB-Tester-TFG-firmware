@@ -397,6 +397,16 @@ public:
     void requestAbort() { abortRequested_ = true; }
     bool isRunning() const { return running_; }
     bool wasAborted() const { return aborted_; }
+
+    /// Stop the whole campaign as soon as any channel trips into a fail state
+    /// (over-current / over-voltage). Enabled by default; the short-circuit
+    /// protection test, which intentionally trips a channel, is exempt. When a
+    /// fault stops the run the current test reports OUTCOME_ERROR and remaining
+    /// tests are skipped.
+    void setStopOnChannelFault(bool en) { stopOnFault_ = en; }
+    bool stoppedOnFault() const { return faultStop_; }
+    /// 1-based channel that tripped the fault stop, or 0 if none.
+    uint8_t faultChannel() const { return faultStop_ ? (uint8_t)(faultCh_ + 1) : 0; }
     uint8_t currentIndex() const { return curIdx_; }
     const char* currentName() const {
         return (curIdx_ < testCount_) ? tests_[curIdx_].name : "";
@@ -476,6 +486,17 @@ private:
     uint32_t curT0_ = 0;
     uint32_t lastProgressMs_ = 0;
 
+    // Stop-on-channel-fault state
+    bool     stopOnFault_ = true;        ///< Halt campaign when a channel trips
+    bool     allowChannelFaults_ = false;///< True only while a fault is expected (short-circuit test)
+    bool     faultStop_ = false;         ///< A channel-fault stop occurred
+    int8_t   faultCh_ = -1;              ///< 0-based channel that tripped (-1 = none)
+    uint32_t lastFaultPollMs_ = 0;       ///< Throttle for the fault poll
+    static constexpr uint32_t FAULT_POLL_MS = 50; ///< Fault scan cadence (matches app loop)
+
+    /// True if the campaign should stop (user abort or a channel fault).
+    bool stopRequested() const { return abortRequested_ || faultStop_; }
+
     // -------------------------------------------------------------------------
     // Per-type runners (called by runOne)
     // -------------------------------------------------------------------------
@@ -516,8 +537,13 @@ private:
     /// Abortable wait: <=10 ms chunks, services comms hook + progress callback.
     void interruptibleDelay(uint32_t ms);
 
-    /// Service comms + throttled progress; returns true if abort was requested.
+    /// Service comms + throttled progress; returns true if the campaign should
+    /// stop (user abort or a channel fault).
     bool serviceAndCheckAbort();
+
+    /// Throttled scan of all bound channels; sets faultStop_/faultCh_ if any
+    /// channel is in a fail state (skipped while allowChannelFaults_ is set).
+    void pollChannelFaults();
 
     /// Apply a TestCase's data-driven setup[] steps (after dutSetup).
     void applySetupSteps(const TestCase& tc);

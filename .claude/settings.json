@@ -3,7 +3,13 @@
     "allow": [
       "Bash(~/.platformio/penv/bin/pio run *)",
       "Bash(python3 -c ' *)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(.venv/bin/python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(.venv/bin/pip list *)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -m pytest tests/test_protocol_mock.py -q -k \"settle or capture\")",
+      "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/ -q)",
+      "Bash(grep -iE \"\\\\.\\(cpp|h\\)$\")"
     ]
   }
 }

@@ -624,11 +624,18 @@ class TestbenchTab(QWidget):
         self._done_summary = msg
         self._set_running(False)
         self.progress.setValue(self.progress.maximum())
-        aborted = " · ABORTED" if msg.get("aborted") else ""
-        self.progress.setFormat("done")
+        if msg.get("fault_stop"):
+            status = f' · <span style="color:#e53935">STOPPED (CH{msg.get("fault_ch", "?")} fault)</span>'
+            self.progress.setFormat("stopped: channel fault")
+        elif msg.get("aborted"):
+            status = " · ABORTED"
+            self.progress.setFormat("done")
+        else:
+            status = ""
+            self.progress.setFormat("done")
         self.summary_label.setText(
             f'<b>{msg.get("pass", 0)} passed · {msg.get("fail", 0)} failed'
-            f' · {msg.get("total", 0)} total{aborted}</b>')
+            f' · {msg.get("total", 0)} total{status}</b>')
         # Campaign teardown (also after an abort): release relays, etc.
         client = self._get_client()
         if client is not None and self.post_cmds:

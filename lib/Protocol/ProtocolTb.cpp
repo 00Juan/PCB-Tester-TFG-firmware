@@ -378,6 +378,8 @@ void TesterProtocol::handleTb(long id, const char* cmd, JsonDocument& doc) {
         done["pass"] = pass;
         done["fail"] = fail;
         done["aborted"] = runner_->wasAborted();
+        done["fault_stop"] = runner_->stoppedOnFault();
+        if (runner_->stoppedOnFault()) done["fault_ch"] = runner_->faultChannel();
         tbSendDoc(io_, done);
         return;
     }

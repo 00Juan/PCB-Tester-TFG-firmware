@@ -265,6 +265,47 @@ def test_capture_validates_parameters(client):
 
 
 # --------------------------------------------------------------------------- #
+# Settling step-response capture (ch.settle)
+# --------------------------------------------------------------------------- #
+
+def test_settle_returns_step_response(client):
+    ev = client.settle(1, from_v=1.0, to_v=10.0, n=200, dt_us=333, settle_ms=0)
+    assert ev["ch"] == 1
+    assert ev["kind"] == "settling"
+    assert ev["unit"] == "V"
+    assert ev["dt_us"] == 333
+    assert len(ev["samples"]) == 200
+    assert "vcmd" in ev and "rshunt" in ev and "imax" in ev
+    # First-order relaxation: starts near from_v, ends near to_v.
+    assert abs(ev["samples"][0] - 1.0) < 0.5
+    assert abs(ev["samples"][-1] - 10.0) < 0.2
+
+
+def test_settle_parks_channel_in_hz(client):
+    client.settle(1, from_v=1.0, to_v=10.0, n=64, dt_us=333, settle_ms=0)
+    # After the capture the channel must be back in high impedance.
+    t = client.next_event("telem")
+    ch1 = next(c for c in t["lvlp"] if c["ch"] == 1)
+    assert ch1["mode"] == "HZ"
+    assert ch1["conn"] is False
+
+
+def test_settle_only_for_lvlp(client):
+    with pytest.raises(CommandError) as e:
+        client.request_settle(9, from_v=0.0, to_v=5.0)
+    assert e.value.err == "E_ARG"
+
+
+def test_settle_validates_parameters(client):
+    with pytest.raises(CommandError):
+        client.request_settle(1, from_v=1.0, to_v=10.0, n=1)  # n < 2
+    with pytest.raises(CommandError):
+        client.request_settle(1, from_v=1.0, to_v=10.0, dt_us=10)  # dt_us < 50
+    with pytest.raises(CommandError):
+        client.request_settle(1, from_v=1.0, to_v=10.0, n=512, dt_us=100000)  # > 2 s
+
+
+# --------------------------------------------------------------------------- #
 # Calibration
 # --------------------------------------------------------------------------- #
 

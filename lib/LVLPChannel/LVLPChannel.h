@@ -86,7 +86,24 @@ private:
 
     const float SHUNT_RESISTANCE = 10.5;
 
-    
+    // Over-current must persist for at least this long before the channel trips.
+    // This rides through the brief inrush/settling transient produced when the
+    // output voltage steps into a (capacitive) DUT, without masking a real fault.
+    // Expressed as a TIME so it is independent of the channel update rate.
+    // The tester's own output settles in <1 ms, so any over-current lasting
+    // longer than this window is real. Trip latency is at most this value plus
+    // one update period.
+    //
+    // Static so a single window applies to every channel, and a plain variable
+    // (not constexpr) so it can be tuned at runtime — see
+    // setOverCurrentDebounceMs(). Default 2 ms; defined in the .cpp.
+    static uint32_t overCurrentDebounceMs;
+
+    // Debounce state for the over-current trip (see checkLimits()).
+    bool overCurrentActive = false;   // an over-current episode is in progress
+    uint32_t overCurrentSinceMs = 0;  // millis() when the episode started
+
+
     
     uint16_t calculateDacValue(float outputVolts);
     
@@ -99,6 +116,12 @@ public:
                 int8_t pwmP, const ChannelCalibrationData& calDataRef,CRGB* ledPtr);
 
     void setLimits(float maxVoltage, float maxCurrent);
+
+    // Over-current debounce window (ms), shared by every channel. Tunable at
+    // runtime (e.g. from the GUI); see checkLimits(). Default 2 ms.
+    static void setOverCurrentDebounceMs(uint32_t ms) { overCurrentDebounceMs = ms; }
+    static uint32_t getOverCurrentDebounceMs() { return overCurrentDebounceMs; }
+
     LVLPStatus getStatus() const { return channelStatus; }
     void resetStatus();
     void init();
@@ -124,6 +147,13 @@ public:
     
     void update();     // To be called in loop for current regulation
 
+    // Refresh cached voltage/current and re-evaluate the safety limits WITHOUT
+    // running the regulation loop (no DAC writes). Lets the blocking testbench
+    // keep over-current / over-voltage protection live during a campaign run
+    // without disturbing channel outputs. Returns true if the channel is in a
+    // fail state after the check.
+    bool monitorFault();
+
     float calculateExpectedOutputVoltage(uint16_t dacValue);
 
     void printDebugInfo() const;
@@ -141,6 +171,7 @@ public:
     float    getLastCurrent() const { return channelCurrentOut; }
     float    getMaxVoltageLimit() const { return maxVoltageLimit; }
     float    getMaxCurrentLimit() const { return maxCurrentLimit; }
+    float    getShuntResistance() const { return SHUNT_RESISTANCE; }
     bool     isConnected() const { return connected; }
     bool     hasPwm() const { return pwmPin >= 0; }
     uint16_t getPwmDuty() const { return pwmDuty; }

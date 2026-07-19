@@ -173,6 +173,10 @@ class PCBTesterClient:
     def set_telemetry_rate(self, hz: int, **kw: Any) -> Dict[str, Any]:
         return self.command("telem.rate", hz=hz, **kw)
 
+    def set_oc_debounce(self, ms: int, **kw: Any) -> Dict[str, Any]:
+        """Set the over-current debounce window (ms) for all LVLP channels."""
+        return self.command("oc.debounce", ms=ms, **kw)
+
     def estop(self, **kw: Any) -> Dict[str, Any]:
         return self.command("estop", **kw)
 
@@ -192,6 +196,35 @@ class PCBTesterClient:
         while True:
             ev = self.next_event("capture", timeout=deadline_extra)
             if ev.get("ch") == ch:
+                return ev
+
+    def request_settle(self, ch: int, from_v: float, to_v: float,
+                       n: int = 300, dt_us: int = 333,
+                       settle_ms: int = 500, **kw: Any) -> Dict[str, Any]:
+        """Fire an LVLP (1-8) step-response capture and return the ack.
+
+        The channel is driven to ``from_v``, allowed to settle for
+        ``settle_ms``, then stepped to ``to_v`` while its output is sampled at
+        ``dt_us`` spacing. The samples arrive later as a "capture" event with
+        kind "settling"; the channel is parked in high impedance afterwards.
+        """
+        params = {"from": from_v, "to": to_v, "n": n,
+                  "dt_us": dt_us, "settle_ms": settle_ms}
+        params.update(kw)
+        return self.command("ch.settle", ch=ch, **params)
+
+    def settle(self, ch: int, from_v: float, to_v: float, n: int = 300,
+               dt_us: int = 333, settle_ms: int = 500) -> Dict[str, Any]:
+        """Blocking step-response capture; returns the "settling" event dict.
+
+        Note: pops from the shared event queue — in GUI code, prefer sending
+        request_settle() and handling the on_capture callback instead.
+        """
+        self.request_settle(ch, from_v, to_v, n, dt_us, settle_ms)
+        deadline_extra = settle_ms / 1000.0 + n * dt_us / 1e6 + DEFAULT_TIMEOUT
+        while True:
+            ev = self.next_event("capture", timeout=deadline_extra)
+            if ev.get("ch") == ch and ev.get("kind") == "settling":
                 return ev
 
     # ------------------------------------------------------------------ #

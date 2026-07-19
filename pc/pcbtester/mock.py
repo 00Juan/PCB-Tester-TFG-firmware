@@ -114,6 +114,7 @@ class MockTester:
         self.hv = [_Hv(ch=self.N_LVLP + self.N_HP + i + 1) for i in range(self.N_HV)]
         self.estop_latched = False
         self.telem_hz = telem_hz
+        self.oc_debounce_ms = 2  # over-current debounce window (all LVLP channels)
         self.cal = self._default_cal()   # in-"RAM" calibration per channel
         self._nvs: Dict[int, dict] = {}  # persisted by cal.save
 
@@ -341,7 +342,7 @@ class MockTester:
                       proto=PROTO_VERSION, lvlp=self.N_LVLP, hp=self.N_HP,
                       hv=self.N_HV, hv_cal=self.hv[0].cal_valid,
                       telem_hz=self.telem_hz, estop=self.estop_latched,
-                      mock=True)
+                      oc_debounce_ms=self.oc_debounce_ms, mock=True)
             return
 
         if cmd == "estop":
@@ -364,6 +365,18 @@ class MockTester:
                 return
             self.telem_hz = hz
             self._ack(msg_id, True, telem_hz=hz)
+            return
+
+        if cmd == "oc.debounce":
+            ms = doc.get("ms")
+            if not isinstance(ms, int) or isinstance(ms, bool):
+                self._ack(msg_id, False, "E_ARG", "missing ms")
+                return
+            if ms < 0 or ms > 5000:
+                self._ack(msg_id, False, "E_ARG", "ms must be 0-5000")
+                return
+            self.oc_debounce_ms = ms
+            self._ack(msg_id, True, oc_debounce_ms=ms)
             return
 
         if cmd.startswith("tb."):
@@ -544,6 +557,51 @@ class MockTester:
                         "dt_ms": dt, "unit": "V", "samples": samples})
             return
 
+        if cmd == "ch.settle":
+            if lc is None:
+                self._ack(msg_id, False, "E_ARG",
+                          "ch.settle only valid for LVLP channels (1-8)")
+                return
+            to_v = _num("to")
+            if to_v is None:
+                self._ack(msg_id, False, "E_ARG", "need to (target volts)")
+                return
+            if lc.st != ST_NORMAL:
+                self._ack(msg_id, False, "E_STATE",
+                          "channel faulted, send ch.reset first")
+                return
+            from_v = _num("from") or 0.0
+            n = doc.get("n", 300)
+            dt_us = doc.get("dt_us", 333)
+            settle_ms = doc.get("settle_ms", 500)
+            if (not isinstance(n, int) or not isinstance(dt_us, int)
+                    or n < 2 or n > 512 or dt_us < 50 or dt_us > 100000
+                    or n * dt_us > 2_000_000 or not isinstance(settle_ms, int)
+                    or settle_ms < 0 or settle_ms > 2000):
+                self._ack(msg_id, False, "E_ARG",
+                          "need n 2-512, dt_us 50-100000, "
+                          "n*dt_us <= 2e6 us, settle_ms 0-2000")
+                return
+            self._ack(msg_id, True, n=n, dt_us=dt_us)
+            # Synthetic first-order step response: the output relaxes from
+            # from_v to to_v with a small time constant, so the apparent
+            # current (vcmd - v)/rshunt decays like a real inrush transient.
+            import math
+
+            rshunt = 10.5
+            tau_ms = 6.0
+            imax = lc.imax
+            samples = [round(to_v + (from_v - to_v) * math.exp(-(k * dt_us / 1000.0) / tau_ms)
+                             + _noise(), 4) for k in range(n)]
+            # Mirror the firmware: leave the channel parked in high impedance.
+            lc.mode, lc.conn, lc.vt = "HZ", False, 0.0
+            self._emit({"type": "capture", "kind": "settling", "ch": ch,
+                        "dt_us": dt_us, "t_total_us": (n - 1) * dt_us,
+                        "from": round(from_v, 3), "to": round(to_v, 3),
+                        "vcmd": round(to_v, 3), "rshunt": rshunt,
+                        "imax": round(imax, 4), "unit": "V", "samples": samples})
+            return
+
         if cmd == "ch.reset":
             if lc is not None:
                 lc.st = ST_NORMAL
@@ -652,6 +710,7 @@ class MockTester:
             for c in self.lvlp:
                 c.mode = "HZ"
                 c.conn = False
+                c.st = ST_NORMAL  # mirror safetyDisconnectAll -> resetStatus
                 c.vt = 0.0
 
     def _tb_apply_setup(self, t: Dict[str, Any]) -> None:
@@ -695,12 +754,16 @@ class MockTester:
         total = len(self.tb_tests)
         n_pass = n_fail = 0
         aborted = False
+        fault_ch = 0                # 1-based channel that stopped the run, 0 = none
+        stopped = False
         for idx, t in enumerate(self.tb_tests):
-            if self._tb_abort:
-                aborted = True
+            if self._tb_abort or stopped:
+                if self._tb_abort:
+                    aborted = True
+                reason = "channel fault" if stopped else "campaign aborted"
                 self._emit({"type": "tb_result", "test": idx, "name": t["name"],
                             "outcome": "SKIP", "measured": 0, "expected": 0,
-                            "ms": 0, "detail": "skipped (campaign aborted)"})
+                            "ms": 0, "detail": f"skipped ({reason})"})
                 continue
             self._tb_current = {"test": idx, "of": total, "name": t["name"],
                                 "elapsed_ms": 0}
@@ -710,6 +773,17 @@ class MockTester:
             self._tb_safety_all_hz()
             self._tb_apply_setup(t)
             outcome, measured, expected, detail = self._tb_evaluate(t)
+            # Stop-on-channel-fault (mirror DUTTestRunner): a channel that
+            # tripped into a fail state during the test halts the campaign. The
+            # short-circuit test trips a channel on purpose, so it is exempt.
+            if t.get("type") != "short_circuit" and not self._tb_abort:
+                with self._lock:
+                    faulted = next((c for c in self.lvlp if c.st != ST_NORMAL), None)
+                if faulted is not None:
+                    stopped = True
+                    fault_ch = faulted.ch
+                    outcome = "ERROR"
+                    detail = f"stopped: CH{fault_ch} fault (over-current/over-voltage)"
             if self._tb_abort and outcome != "SKIP":
                 outcome, detail = "ERROR", "aborted"
             ms = int((time.monotonic() - t0) * 1000)
@@ -724,8 +798,11 @@ class MockTester:
             if self._tb_abort:
                 aborted = True
         self._tb_safety_all_hz()
-        self._emit({"type": "tb_done", "total": total, "pass": n_pass,
-                    "fail": n_fail, "aborted": aborted})
+        done = {"type": "tb_done", "total": total, "pass": n_pass,
+                "fail": n_fail, "aborted": aborted, "fault_stop": stopped}
+        if stopped:
+            done["fault_ch"] = fault_ch
+        self._emit(done)
         self.tb_busy = False
 
     def _tb_evaluate(self, t: Dict[str, Any]):

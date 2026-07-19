@@ -29,6 +29,10 @@
 //   {"id":11,"cmd":"estop"}
 //   {"id":12,"cmd":"estop.clear"}             // dismiss the latch indicator
 //   {"id":13,"cmd":"ch.capture","ch":1,"n":256,"dt_ms":2}  // voltage burst -> "capture" event
+//   {"id":18,"cmd":"ch.settle","ch":1,"from":1.0,"to":10.0,"n":300,
+//    "dt_us":333,"settle_ms":500}  // LVLP step-response -> "capture" (kind
+//                                  // "settling") event, for over-current
+//                                  // debounce sizing
 //   {"id":14,"cmd":"cal.get","ch":1}          // ack carries "cal" object
 //   {"id":15,"cmd":"cal.set","ch":1,"cal":{...}}           // merge into RAM
 //   {"id":16,"cmd":"cal.save"}                // persist all channels to NVS
@@ -119,6 +123,8 @@ private:
 
     void handleLine(char* line);
     void handleCapture(long id, uint8_t ch, uint16_t n, uint16_t dtMs);
+    void handleSettle(long id, uint8_t ch, float fromV, float toV,
+                      uint16_t n, uint32_t dtUs, uint16_t settleMs);
     void handleCalGet(long id, uint8_t ch);
     void handleCalSet(long id, uint8_t ch, JsonObjectConst cal);
     void handleCalSave(long id);

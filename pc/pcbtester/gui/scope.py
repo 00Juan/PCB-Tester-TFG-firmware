@@ -74,6 +74,8 @@ class ScopeTab(QWidget):
         self._timeout.start(n * dt + 3000)
 
     def on_capture(self, msg: dict) -> None:
+        if msg.get("kind") == "settling":
+            return  # handled by the Settling tab
         if self._armed_ch is None or msg.get("ch") != self._armed_ch:
             return
         self._disarm()

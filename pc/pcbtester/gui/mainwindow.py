@@ -8,9 +8,9 @@ from typing import Optional
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QMainWindow, QMessageBox, QPushButton, QSpinBox, QTabWidget, QVBoxLayout,
-    QWidget,
+    QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFrame, QGridLayout,
+    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QSpinBox,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
 from ..client import CommandError, PCBTesterClient, ProtocolTimeout
@@ -19,6 +19,7 @@ from .calibration import CalibrationTab
 from .cards import HpCard, HvCard, LimitsDialog, LvlpCard
 from .operate import OperateTab
 from .scope import ScopeTab
+from .settling import SettlingTab
 from .testbench import TestbenchTab
 from .trends import TrendsTab
 
@@ -47,6 +48,7 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(10, 8, 10, 8)
         root.addLayout(self._build_connection_bar())
+        root.addLayout(self._build_global_controls())
         root.addWidget(self._build_banner())
 
         dashboard = QWidget()
@@ -58,6 +60,8 @@ class MainWindow(QMainWindow):
         self.trends_tab = TrendsTab()
         self.scope_tab = ScopeTab(request_capture=self._request_capture)
         self.bridge.capture.connect(self.scope_tab.on_capture)
+        self.settling_tab = SettlingTab(request_settle=self._request_settle)
+        self.bridge.capture.connect(self.settling_tab.on_capture)
         self.cal_tab = CalibrationTab(get_client=lambda: self.client)
         self.operate_tab = OperateTab(
             get_client=lambda: self.client,
@@ -76,6 +80,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tb_tab, "Testbench")
         self.tabs.addTab(self.trends_tab, "Trends")
         self.tabs.addTab(self.scope_tab, "Scope")
+        self.tabs.addTab(self.settling_tab, "Settling")
         self.tabs.addTab(self.cal_tab, "Calibration")
         root.addWidget(self.tabs, 1)
 
@@ -131,6 +136,43 @@ class MainWindow(QMainWindow):
         bar.addSpacing(16)
         bar.addWidget(self.estop_btn)
         self._refresh_ports()
+        return bar
+
+    def _build_global_controls(self) -> QHBoxLayout:
+        """Tester-wide settings: one limit applied to every LVLP channel, and
+        the shared over-current debounce window."""
+        bar = QHBoxLayout()
+
+        # Global limits, broadcast to LVLP CH1-8 (HP/HV keep their own limits).
+        self.glim_vmax = QDoubleSpinBox(minimum=0.0, maximum=15.0, value=12.0,
+                                        decimals=2, singleStep=0.5, suffix=" V")
+        self.glim_imax = QDoubleSpinBox(minimum=0.0, maximum=0.5, value=0.05,
+                                        decimals=3, singleStep=0.01, suffix=" A")
+        self.glim_btn = QPushButton("Apply to all LVLP")
+        self.glim_btn.setToolTip("Send these Vmax/Imax limits to CH1–CH8")
+        self.glim_btn.clicked.connect(self._apply_global_limits)
+
+        # Over-current debounce window (LVLPChannel::overCurrentDebounceMs).
+        self.debounce_spin = QSpinBox(minimum=0, maximum=5000, value=2,
+                                      singleStep=1, suffix=" ms")
+        self.debounce_spin.setToolTip(
+            "Over-current must persist this long before a channel trips "
+            "(all LVLP channels). The Settling tab suggests a value.")
+        self.debounce_btn = QPushButton("Apply")
+        self.debounce_btn.clicked.connect(self._apply_debounce)
+
+        bar.addWidget(QLabel("Global limits:"))
+        bar.addWidget(self.glim_vmax)
+        bar.addWidget(self.glim_imax)
+        bar.addWidget(self.glim_btn)
+        bar.addSpacing(20)
+        bar.addWidget(QLabel("OC debounce:"))
+        bar.addWidget(self.debounce_spin)
+        bar.addWidget(self.debounce_btn)
+        bar.addStretch(1)
+
+        self._global_controls = [self.glim_vmax, self.glim_imax, self.glim_btn,
+                                 self.debounce_spin, self.debounce_btn]
         return bar
 
     def _build_banner(self) -> QFrame:
@@ -230,6 +272,7 @@ class MainWindow(QMainWindow):
         self.device_label.setText(
             f"{info.get('name')}{tag} · fw {info.get('fw')} · proto {info.get('proto')}")
         self.conn_status.setText("connected")
+        self.debounce_spin.setValue(int(info.get("oc_debounce_ms", 2)))
         self._set_connected_ui(True)
         if info.get("estop"):
             self._show_estop_banner("previous session")
@@ -258,6 +301,8 @@ class MainWindow(QMainWindow):
         for card in self.lvlp_cards + self.hp_cards + [self.hv_card]:
             card.setEnabled(connected)
         self.estop_btn.setEnabled(connected)
+        for w in self._global_controls:
+            w.setEnabled(connected)
         self.port_combo.setEnabled(not connected and not self.mock_check.isChecked())
         self.mock_check.setEnabled(not connected)
 
@@ -296,6 +341,25 @@ class MainWindow(QMainWindow):
             imax = dlg.imax.value() if dlg.imax else None
             self._cmd(self.client.set_limits, ch, dlg.vmax.value(), imax)
 
+    def _apply_global_limits(self) -> None:
+        if self.client is None:
+            self.statusBar().showMessage("not connected", 4000)
+            return
+        vmax, imax = self.glim_vmax.value(), self.glim_imax.value()
+        for ch in range(1, N_LVLP + 1):
+            if self._cmd(self.client.set_limits, ch, vmax, imax) is None:
+                return  # error already surfaced
+        self.statusBar().showMessage(
+            f"limits applied to CH1–CH{N_LVLP}: {vmax:.2f} V / {imax:.3f} A", 4000)
+
+    def _apply_debounce(self) -> None:
+        if self.client is None:
+            self.statusBar().showMessage("not connected", 4000)
+            return
+        ms = self.debounce_spin.value()
+        if self._cmd(self.client.set_oc_debounce, ms) is not None:
+            self.statusBar().showMessage(f"over-current debounce set to {ms} ms", 4000)
+
     def _rate_changed(self, hz: int) -> None:
         self._cmd(self.client.set_telemetry_rate, hz) if self.client else None
 
@@ -308,6 +372,14 @@ class MainWindow(QMainWindow):
             return False
         return self._cmd(self.client.command, "ch.capture",
                          ch=ch, n=n, dt_ms=dt_ms) is not None
+
+    def _request_settle(self, ch: int, from_v: float, to_v: float, n: int,
+                        dt_us: int, settle_ms: int) -> bool:
+        if self.client is None:
+            self.statusBar().showMessage("not connected", 4000)
+            return False
+        return self._cmd(self.client.request_settle, ch, from_v, to_v,
+                         n=n, dt_us=dt_us, settle_ms=settle_ms) is not None
 
     # ------------------------------------------------------------------ #
     # Events from the device (already on the Qt thread via the bridge)

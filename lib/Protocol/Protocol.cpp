@@ -198,6 +198,7 @@ void TesterProtocol::handleLine(char* line) {
         res["hv_cal"] = (nHv_ > 0) ? hv_[0].isCalibrationValid() : false;
         res["telem_hz"] = telemHz_;
         res["estop"] = estopLatched_;
+        res["oc_debounce_ms"] = LVLPChannel::getOverCurrentDebounceMs();
         sendDoc(io_, res);
         return;
     }
@@ -234,6 +235,26 @@ void TesterProtocol::handleLine(char* line) {
         setTelemetryRateHz((uint8_t)hz);
         res["ok"] = true;
         res["telem_hz"] = telemHz_;
+        sendDoc(io_, res);
+        return;
+    }
+
+    // ---- oc.debounce: over-current debounce window (ms), all LVLP channels ----
+    if (strcmp(cmd, "oc.debounce") == 0) {
+        if (!doc["ms"].is<int>()) {
+            res["ok"] = false; res["err"] = "E_ARG"; res["msg"] = "missing ms";
+            sendDoc(io_, res);
+            return;
+        }
+        int ms = doc["ms"];
+        if (ms < 0 || ms > 5000) {
+            res["ok"] = false; res["err"] = "E_ARG"; res["msg"] = "ms must be 0-5000";
+            sendDoc(io_, res);
+            return;
+        }
+        LVLPChannel::setOverCurrentDebounceMs((uint32_t)ms);
+        res["ok"] = true;
+        res["oc_debounce_ms"] = LVLPChannel::getOverCurrentDebounceMs();
         sendDoc(io_, res);
         return;
     }
@@ -437,6 +458,43 @@ void TesterProtocol::handleLine(char* line) {
             handleCapture(id, (uint8_t)ch, (uint16_t)n, (uint16_t)dt);
             return;
         }
+
+        if (strcmp(cmd, "ch.settle") == 0) {
+            if (!lc) {
+                res["ok"] = false; res["err"] = "E_ARG";
+                res["msg"] = "ch.settle only valid for LVLP channels (1-8)";
+                sendDoc(io_, res);
+                return;
+            }
+            if (!doc["to"].is<float>()) {
+                res["ok"] = false; res["err"] = "E_ARG";
+                res["msg"] = "need to (target volts)";
+                sendDoc(io_, res);
+                return;
+            }
+            if (lc->getStatus() != STATUS_NORMAL) {
+                res["ok"] = false; res["err"] = "E_STATE";
+                res["msg"] = "channel faulted, send ch.reset first";
+                sendDoc(io_, res);
+                return;
+            }
+            float fromV   = doc["from"] | 0.0f;
+            float toV     = doc["to"].as<float>();
+            int   n       = doc["n"] | 300;
+            long  dtUs    = doc["dt_us"] | 333;
+            int   settleMs = doc["settle_ms"] | 500;
+            if (n < 2 || n > (int)CAPTURE_MAX_SAMPLES || dtUs < 50 || dtUs > 100000
+                || (long)n * dtUs > 2000000L || settleMs < 0 || settleMs > 2000) {
+                res["ok"] = false; res["err"] = "E_ARG";
+                res["msg"] = "need n 2-512, dt_us 50-100000, "
+                             "n*dt_us <= 2e6 us, settle_ms 0-2000";
+                sendDoc(io_, res);
+                return;
+            }
+            handleSettle(id, (uint8_t)ch, fromV, toV,
+                         (uint16_t)n, (uint32_t)dtUs, (uint16_t)settleMs);
+            return;
+        }
     }
 
     res["ok"] = false;
@@ -589,6 +647,75 @@ void TesterProtocol::handleCapture(long id, uint8_t ch, uint16_t n, uint16_t dtM
     doc["unit"] = "V";
     JsonArray arr = doc["samples"].to<JsonArray>();
     for (uint16_t k = 0; k < n; k++) arr.add(round3(buf[k]));
+    sendDoc(io_, doc);
+}
+
+// ----------------------------------------------------------------------------
+// ch.settle — LVLP output step-response capture.
+//
+// Drives the channel to `fromV`, waits `settleMs`, then steps to `toV` and
+// samples the output voltage at `dtUs` spacing (busy-waited for even timing).
+// The result lets the PC reconstruct the apparent current
+// (vcmd - vout)/rshunt over time and size the over-current debounce window.
+// The channel is parked in high impedance afterwards.
+// ----------------------------------------------------------------------------
+void TesterProtocol::handleSettle(long id, uint8_t ch, float fromV, float toV,
+                                  uint16_t n, uint32_t dtUs, uint16_t settleMs) {
+    static float buf[CAPTURE_MAX_SAMPLES];
+    LVLPChannel& c = lvlp_[ch - 1];
+
+    // Ack immediately — the settle delay + capture window can take up to ~2.5 s
+    // and the client waits for the "capture" event, not the ack.
+    {
+        JsonDocument res;
+        res["type"] = "ack";
+        if (id >= 0) res["id"] = id;
+        res["ok"] = true;
+        res["n"] = n;
+        res["dt_us"] = dtUs;
+        sendDoc(io_, res);
+    }
+
+    // Establish the starting point and let it fully settle.
+    c.setMode(MODE_VOLTAGE_SOURCE);
+    c.setOutputVoltage(fromV);
+    delay(settleMs);
+
+    // t0 is captured BEFORE the DAC write, matching the live firmware where the
+    // command returns and update() samples some time later. vCmd is the
+    // feed-forward voltage the current calc jumps to the instant of the step.
+    uint32_t t0 = micros();
+    c.setOutputVoltage(toV);
+    float vCmd = c.calculateExpectedOutputVoltage(c.dacValueAttribute);
+
+    uint32_t nextT = 0;
+    for (uint16_t k = 0; k < n; k++) {
+        while ((uint32_t)(micros() - t0) < nextT) {
+            // busy-wait for even spacing
+        }
+        buf[k] = c.readVoltage();
+        nextT += dtUs;
+    }
+    uint32_t elapsedUs = micros() - t0;
+
+    // Park the channel safely before streaming the (large) result back.
+    c.setMode(MODE_HIGH_IMPEDANCE);
+    c.setOutputVoltage(0.0f);
+
+    JsonDocument doc;
+    doc["type"] = "capture";
+    doc["kind"] = "settling";
+    doc["ch"] = ch;
+    doc["dt_us"] = dtUs;
+    doc["t_total_us"] = elapsedUs;
+    doc["from"] = round3(fromV);
+    doc["to"] = round3(toV);
+    doc["vcmd"] = round3(vCmd);
+    doc["rshunt"] = round3(c.getShuntResistance());
+    doc["imax"] = round4(c.getMaxCurrentLimit());
+    doc["unit"] = "V";
+    JsonArray arr = doc["samples"].to<JsonArray>();
+    for (uint16_t k = 0; k < n; k++) arr.add(round4(buf[k]));
     sendDoc(io_, doc);
 }
 
