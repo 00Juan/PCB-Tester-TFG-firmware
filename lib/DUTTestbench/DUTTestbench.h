@@ -10,7 +10,7 @@
 // CONSTANTS
 // ============================================================================
 
-static constexpr uint8_t DUT_MAX_TESTS    = 32;
+static constexpr uint8_t DUT_MAX_TESTS    = 48;
 static constexpr uint8_t DUT_MAX_CHANNELS = 8;
 static constexpr uint8_t DUT_MAX_HP_CHANNELS = 2;
 
@@ -305,7 +305,7 @@ struct SetupStep {
     uint16_t duty;   ///< STEP_PWM duty cycle
 };
 
-static constexpr uint8_t DUT_MAX_SETUP_STEPS = 12;
+static constexpr uint8_t DUT_MAX_SETUP_STEPS = 16;
 static constexpr uint8_t DUT_TEST_NAME_LEN   = 32;
 
 // ============================================================================
