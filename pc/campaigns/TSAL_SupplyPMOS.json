@@ -2,7 +2,7 @@
   "format": "pcbtester-campaign",
   "version": 1,
   "name": "TSAL",
-  "description": "TSAL (Tractive System Active Light) \u2014 SupplyPMOS variant of TSAL.json. Wiring: CH1=HV_Accu_State, CH2=AIR-_AUX2, CH3=AIR-_Coil, CH4=SDC_END, CH5=Precharge_Coil, CH6=PRECHARGE_AUX2, CH7=AIR+_AUX2, CH8=AIR+_Coil, CH9(HP)=GreenLed (active-high: ON=1.5V, OFF=0V), CH10(HP)=TSAL supply high-side switch (passes an external 12V rail wired to its input to the DUT V+ when connected; HP channels sense/pass only, they do not source voltage), CH11(HV)=DUT GND common return. The DUT supply is now controlled by CH10 (high-side switching) instead of CH11 (low-side switching); CH11 stays connected as the common GND return. 'pre' powers the DUT once (no latching -> no power-cycling between tests) and 'post' releases all relays. RedLed is no longer instrumented (CH10 reused as the supply high-side switch).",
+  "description": "TSAL (Tractive System Active Light) \u2014 SupplyPMOS variant of TSAL.json. Wiring: CH1=HV_Accu_State, CH2=AIR-_AUX2, CH3=AIR-_Coil, CH4=SDC_END, CH5=Precharge_Coil, CH6=PRECHARGE_AUX2, CH7=AIR+_AUX2, CH8=AIR+_Coil, CH9(HP)=GreenLed (active-high: ON=>3V, OFF=0V), CH10(HP)=TSAL supply high-side switch (passes an external 12V rail wired to its input to the DUT V+ when connected; HP channels sense/pass only, they do not source voltage), CH11(HV)=DUT GND common return. The DUT supply is now controlled by CH10 (high-side switching) instead of CH11 (low-side switching); CH11 stays connected as the common GND return. 'pre' powers the DUT once (no latching -> no power-cycling between tests) and 'post' releases all relays. RedLed is no longer instrumented (CH10 reused as the supply high-side switch).",
   "pre": [
     {
       "cmd": "ch.limits",
@@ -96,8 +96,8 @@
       "params": {
         "sense_mask": 0,
         "sense_hp_mask": 1,
-        "expected_v": 1.5,
-        "tolerance_v": 0.7,
+        "expected_v": 9.0,
+        "tolerance_v": 6.0,
         "settle_ms": 500
       }
     },
@@ -1113,8 +1113,8 @@
       "params": {
         "sense_mask": 0,
         "sense_hp_mask": 1,
-        "expected_v": 1.5,
-        "tolerance_v": 0.7,
+        "expected_v": 9.0,
+        "tolerance_v": 6.0,
         "settle_ms": 500
       }
     }

@@ -2,7 +2,7 @@
   "format": "pcbtester-campaign",
   "version": 1,
   "name": "TSAL",
-  "description": "TSAL (Tractive System Active Light) \u2014 port of test_TSAL.cpp. Wiring: CH1=HV_Accu_State, CH2=AIR-_AUX2, CH3=AIR-_Coil, CH4=SDC_END, CH5=Precharge_Coil, CH6=PRECHARGE_AUX2, CH7=AIR+_AUX2, CH8=AIR+_Coil, CH9(HP)=GreenLed (active-high: ON=1.5V, OFF=0V), CH10(HP)=RedLed (open-drain vs 12V rail: LED ON=0V, OFF=12V), CH11(HV)=DUT GND return. LV supply is external; 'pre' powers the DUT once (no latching -> no power-cycling between tests) and 'post' releases all relays. Red circuit is never energized (no HV on HV+): RedLed must stay OFF in every test.",
+  "description": "TSAL (Tractive System Active Light) \u2014 port of test_TSAL.cpp. Wiring: CH1=HV_Accu_State, CH2=AIR-_AUX2, CH3=AIR-_Coil, CH4=SDC_END, CH5=Precharge_Coil, CH6=PRECHARGE_AUX2, CH7=AIR+_AUX2, CH8=AIR+_Coil, CH9(HP)=GreenLed (active-high: ON=>3V, OFF=0V), CH10(HP)=RedLed (open-drain vs 12V rail: LED ON=0V, OFF=12V), CH11(HV)=DUT GND return. LV supply is external; 'pre' powers the DUT once (no latching -> no power-cycling between tests) and 'post' releases all relays. Red circuit is never energized (no HV on HV+): RedLed must stay OFF in every test.",
   "pre": [
     {
       "cmd": "ch.limits",
@@ -96,8 +96,8 @@
       "params": {
         "sense_mask": 0,
         "sense_hp_mask": 1,
-        "expected_v": 1.5,
-        "tolerance_v": 0.7,
+        "expected_v": 9.0,
+        "tolerance_v": 6.0,
         "settle_ms": 500
       }
     },
@@ -1166,8 +1166,8 @@
       "params": {
         "sense_mask": 0,
         "sense_hp_mask": 1,
-        "expected_v": 1.5,
-        "tolerance_v": 0.7,
+        "expected_v": 9.0,
+        "tolerance_v": 6.0,
         "settle_ms": 500
       }
     },

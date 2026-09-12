@@ -1,0 +1,34 @@
+test,name,outcome,measured,expected,ms,detail
+0,Safe: TS_is_OFF=1 Green ON,FAIL,0.008624,9,524,Voltage 0.0086 V (target 9.0000 V) err 8.9914 V > tol 6.0000 V on HPCH1
+1,HV pres: TS_is_OFF=0 Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+2,AIR+ cls: TS_is_OFF=0 GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+3,AIR- cls: TS_is_OFF=0 GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+4,PRE cls: TS_is_OFF=0 Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+5,AIR+_Stuck=1 Green OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+6,AIR-_Stuck=1 Green OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+7,PRECHARGE_Stuck=1 Green OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+8,RlyClsdNoVolt AIR+ Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+9,RlyClsdNoVolt AIR- Grn OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+10,RlyClsdNoVolt PRE Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+11,SCS AIR+AUX2 gnd: Green OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+12,SCS AIR-AUX2 gnd: Green OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+13,SCS PREAUX2 gnd: Green OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+14,SCS HVAccu gnd: Green OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+15,SCS AIR+AUX2 open: Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+16,SCS AIR-AUX2 open: Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+17,SCS PREAUX2 open: Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+18,SCS HVAccu open: Grn OFF,PASS,0.008624,0,1027,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+19,Latch StuckAIR+: Grn OFF,PASS,0.008624,0,1024,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+20,Latch StuckAIR-: Grn OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+21,Latch StuckPRE: Grn OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+22,Latch RlyNoV AIR+: Grn OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+23,Latch RlyNoV AIR-: Grn OFF,PASS,0.008624,0,1025,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+24,Latch RlyNoV PRE: Grn OFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+25,Latch SCSgnd AIR+AUX2: GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+26,Latch SCSgnd AIR-AUX2: GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+27,Latch SCSgnd PREAUX2: GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+28,Latch SCSgnd HVAccu: GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+29,Latch SCSopen AIR+AUX2:GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+30,Latch SCSopen AIR-AUX2:GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+31,Latch SCSopen PREAUX2: GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1
+32,Latch SCSopen HVAccu: GrnOFF,PASS,0.008624,0,1026,Voltage 0.0086 V (target 0.0000 V) err 0.0086 V <= tol 0.7000 V on HPCH1

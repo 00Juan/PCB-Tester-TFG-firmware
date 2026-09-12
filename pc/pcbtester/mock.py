@@ -683,8 +683,8 @@ class MockTester:
             if not isinstance(s, dict) or s.get("step") not in (
                     "vs", "cs", "hz", "pwm", "wait", "sr"):
                 return f'setup step {i}: unknown kind "{s.get("step", "")}"'
-        if len(t.get("setup", [])) > 12:
-            return "too many setup steps (max 12)"
+        if len(t.get("setup", [])) > 24:
+            return "too many setup steps (max 24)"
         return None
 
     # ---- mini-runner ---------------------------------------------------- #

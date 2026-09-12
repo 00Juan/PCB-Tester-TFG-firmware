@@ -64,8 +64,8 @@
       "params": {
         "sense_mask": 0,
         "sense_hp_mask": 1,
-        "expected_v": 1.5,
-        "tolerance_v": 0.7,
+        "expected_v": 9.0,
+        "tolerance_v": 6.0,
         "settle_ms": 500
       }
     },

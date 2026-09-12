@@ -305,7 +305,7 @@ struct SetupStep {
     uint16_t duty;   ///< STEP_PWM duty cycle
 };
 
-static constexpr uint8_t DUT_MAX_SETUP_STEPS = 16;
+static constexpr uint8_t DUT_MAX_SETUP_STEPS = 24;
 static constexpr uint8_t DUT_TEST_NAME_LEN   = 32;
 
 // ============================================================================
