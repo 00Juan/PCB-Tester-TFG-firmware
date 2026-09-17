@@ -143,6 +143,24 @@ class PCBTesterClient:
     def hello(self, **kw: Any) -> Dict[str, Any]:
         return self.command("hello", **kw)
 
+    def handshake(self, attempts: int = 4, timeout: float = 1.0) -> Dict[str, Any]:
+        """Send ``hello``, retrying a few times, and return the ack.
+
+        The ESP32-S3 native USB-Serial-JTAG issues a USB bus reset when the
+        host (re)opens the port. That momentarily masks the device's RX
+        interrupt; the firmware re-arms it within ~100 ms (see
+        keepRxInterruptArmed in src/app.cpp), but a single ``hello`` sent inside
+        that window is dropped. Retrying makes the connect robust to it instead
+        of failing with a one-shot timeout.
+        """
+        last: Exception = ProtocolTimeout("no hello attempts made")
+        for _ in range(max(1, attempts)):
+            try:
+                return self.hello(timeout=timeout)
+            except ProtocolTimeout as e:
+                last = e
+        raise last
+
     def set_channel(self, ch: int, mode: str, v: Optional[float] = None,
                     i: Optional[float] = None, duty: Optional[int] = None,
                     freq: Optional[int] = None, res: Optional[int] = None,

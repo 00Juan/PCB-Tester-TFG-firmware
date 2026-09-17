@@ -20,6 +20,44 @@
 #include "CalibrationStore.h"
 #include "DUTTestbench.h"
 
+#if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE && \
+    defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+#include "hal/usb_serial_jtag_ll.h"
+#define USB_CDC_NATIVE 1
+#else
+#define USB_CDC_NATIVE 0
+#endif
+
+// ---------------------------------------------------------------------------
+// USB-Serial-JTAG reconnect fix (keepRxInterruptArmed)
+//
+// When the PC closes and reopens the port — a GUI disconnect, opening/closing
+// a serial monitor, or quitting the app without disconnecting first — the USB
+// host issues a bus reset. On this arduino-esp32 core (2.0.x) the HWCDC
+// bus-reset ISR re-enables ONLY the TX (SERIAL_IN_EMPTY) interrupt and leaves
+// the RX (SERIAL_OUT_RECV_PKT) interrupt masked (see cores/esp32/HWCDC.cpp).
+// The device then keeps streaming telemetry but never receives another command
+// — the next "hello" is never answered and only a chip reset (reflash)
+// recovers it.
+//
+// loop() runs regardless of the port state, so we simply make sure the RX
+// interrupt is armed. We only touch the enable register when it is actually
+// masked, so normal operation never races the CDC ISR; a bus reset is repaired
+// within one poll (<100 ms), long before the operator reconnects.
+// ---------------------------------------------------------------------------
+static void keepRxInterruptArmed() {
+#if USB_CDC_NATIVE
+  static uint32_t lastCheckMs = 0;
+  uint32_t now = millis();
+  if (now - lastCheckMs < 100) return;
+  lastCheckMs = now;
+  uint32_t ena = usb_serial_jtag_ll_get_intr_ena_status();
+  if (!(ena & USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT)) {
+    usb_serial_jtag_ll_ena_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT);
+  }
+#endif
+}
+
 static TesterProtocol proto;
 static CalibrationStore calStore;
 static DUTTestRunner testRunner;
@@ -186,6 +224,8 @@ void loop() {
   if (Serial) {
     proto.emitTelemetryIfDue();
   }
+
+  keepRxInterruptArmed(); // recover USB-CDC RX after a host reconnect bus reset
 
   if (now - lastOledMs >= OLED_PERIOD_MS) {
     lastOledMs = now;
